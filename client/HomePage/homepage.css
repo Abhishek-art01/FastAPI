@@ -1,0 +1,189 @@
+/* --- 1. Variables & Theme --- */
+:root {
+    /* Color Palette */
+    --primary: #6366f1;       /* Indigo */
+    --primary-hover: #4f46e5;
+    --secondary: #10b981;     /* Emerald Green */
+    --background: #f8fafc;    /* Very light gray/blue */
+    --surface: #ffffff;       /* White cards */
+    --text-main: #1e293b;     /* Dark Slate */
+    --text-muted: #64748b;    /* Muted Slate */
+    --border: #e2e8f0;        /* Light border */
+    
+    /* Spacing & Radius */
+    --radius: 16px;
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-hover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* --- 2. Global Reset --- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background-color: var(--background);
+    color: var(--text-main);
+    line-height: 1.5;
+    padding: 2rem;
+}
+
+/* --- 3. Layout --- */
+header {
+    max-width: 1200px;
+    margin: 0 auto 2rem auto;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+header h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 350px; /* Content takes left, Form takes 350px right */
+    gap: 2rem;
+    align-items: start;
+}
+
+/* --- 4. Hero Grid (Left Side) --- */
+.hero-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.hero-card {
+    background: var(--surface);
+    padding: 1.5rem;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.hero-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-hover);
+    border-color: var(--primary);
+}
+
+.hero-card h3 {
+    font-size: 1.25rem;
+    color: var(--text-main);
+    margin-bottom: 0.25rem;
+}
+
+.hero-card p {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+.hero-card strong {
+    color: var(--primary);
+}
+
+/* Empty State */
+.empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 4rem 2rem;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 2px dashed var(--border);
+    color: var(--text-muted);
+}
+
+/* --- 5. Sidebar Form (Right Side) --- */
+.sidebar-form {
+    background: var(--surface);
+    padding: 2rem;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    position: sticky; /* Keeps form visible while scrolling */
+    top: 2rem;
+}
+
+.sidebar-form h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-main);
+}
+
+.form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--background);
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1); /* Indigo glow */
+}
+
+.btn-submit {
+    width: 100%;
+    padding: 0.875rem;
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-submit:hover {
+    background-color: var(--primary-hover);
+}
+
+/* --- 6. Mobile Responsiveness --- */
+@media (max-width: 768px) {
+    .container {
+        grid-template-columns: 1fr; /* Stack into single column */
+    }
+    
+    .sidebar-form {
+        position: static; /* Remove sticky on mobile */
+        order: -1; /* Move form to top */
+    }
+    
+    body {
+        padding: 1rem;
+    }
+}

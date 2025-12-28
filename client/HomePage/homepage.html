@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hero Manager</title>
+    <link rel="stylesheet" href="/static/homepage.css">
+</head>
+<body>
+
+    <header>
+        <h1>🦸 Hero Registry</h1>
+    </header>
+
+    <main class="container">
+        <section>
+            {% if heroes %}
+                <div class="hero-grid">
+                    {% for hero in heroes %}
+                    <div class="hero-card">
+                        <h3>{{ hero.name }}</h3>
+                        <p><strong>Secret Identity:</strong> {{ hero.secret_name }}</p>
+                        {% if hero.age %}
+                        <p><strong>Age:</strong> {{ hero.age }}</p>
+                        {% endif %}
+                        <p style="font-size: 0.8em; color: #aaa; margin-top: 10px;">ID: {{ hero.id }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <p>No heroes found in the database yet. Why not add one? 👉</p>
+                </div>
+            {% endif %}
+        </section>
+
+        <aside class="sidebar-form">
+            <h2>Add New Hero</h2>
+            <form action="/heroes/" method="post">
+                <div class="form-group">
+                    <label for="name">Hero Name:</label>
+                    <input type="text" id="name" name="name" required placeholder="e.g., Spider-Man">
+                </div>
+                
+                <div class="form-group">
+                    <label for="secret_name">Secret Identity:</label>
+                    <input type="text" id="secret_name" name="secret_name" required placeholder="e.g., Peter Parker">
+                </div>
+                
+                <div class="form-group">
+                    <label for="age">Age (Optional):</label>
+                    <input type="number" id="age" name="age" placeholder="e.g., 25">
+                </div>
+                
+                <button type="submit" class="btn-submit">Create Hero</button>
+            </form>
+        </aside>
+    </main>
+
+</body>
+</html>
