@@ -128,10 +128,16 @@ class AdminAuth(AuthenticationBackend):
         return True
 
     async def authenticate(self, request: Request) -> bool:
-        # 👇 CHECK 2: Only allow access if session user is strictly "admin"
-        current_user = request.session.get("user")
-        print(f"🕵️ CHECKING SESSION: User is '{current_user}'")
-        return current_user == "admin"
+        user = request.session.get("user")
+        
+        # 👇 DEFINE YOUR VIP LIST HERE TOO
+        allowed_users = ["admin", "chickenman"]
+        
+        # Check if the user is in the list
+        if user in allowed_users:
+            return True
+            
+        return False
 # Initialize the auth backend
 authentication_backend = AdminAuth(secret_key="same_secret_key_as_middleware")
 
