@@ -32,10 +32,10 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     SessionMiddleware, 
-    secret_key="static_key",
-    https_only=False,
-    same_site="lax",
-    domain="127.0.0.1" # 👈 Force it to bind to this IP
+    secret_key="static_super_secret_key", 
+    max_age=3600,
+    https_only=True,   # ✅ Set to True for Render (HTTPS)
+    same_site="lax"
 )
 
 # --- 3. MOUNT STATIC FILES (CRITICAL FOR CSS) --- 
