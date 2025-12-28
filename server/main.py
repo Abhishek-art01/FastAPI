@@ -1,28 +1,25 @@
-from fastapi import FastAPI, Depends, Request, Form
+from fastapi import FastAPI, Depends, Request, Form, Response
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles  
-from fastapi.responses import RedirectResponse 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
 from sqlmodel import select, Session
 from sqladmin import Admin, ModelView
+from sqladmin.authentication import AuthenticationBackend
 from pathlib import Path
 from contextlib import asynccontextmanager
-from starlette.middleware.sessions import SessionMiddleware
-from sqladmin.authentication import AuthenticationBackend
-from fastapi import Response
-# IMPORT FROM FILES
+import os
+
+# Import local modules
 from .database import engine, get_session, create_db_and_tables
 from .models import Hero, User
 from .auth import verify_password, get_password_hash
 
-# --- 1. SETUP PATHS ---
+# --- SETUP PATHS ---
 BASE_DIR = Path(__file__).resolve().parent
-# Points to: Folder/client/HomePage
 CLIENT_DIR = BASE_DIR.parent / "client" / "HomePage"
-# Points to: Folder/client/LoginPage
 LOGIN_DIR = BASE_DIR.parent / "client" / "LoginPage"
 
-
-# --- 2. LIFESPAN (Startup Logic) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
@@ -30,97 +27,47 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# --- 1. MIDDLEWARE (The Fix for Render) ---
+# We check if we are on Render by looking for the 'RENDER' environment variable.
+# If on Render -> Secure Cookies (https_only=True)
+# If on Laptop -> Normal Cookies (https_only=False)
+on_render = os.environ.get("RENDER") is not None
+
 app.add_middleware(
-    SessionMiddleware, 
-    secret_key="static_super_secret_key", 
-    max_age=3600,
-    https_only=True,   # ✅ Set to True for Render (HTTPS)
+    SessionMiddleware,
+    secret_key="super_secret_static_key",
+    max_age=3600,       # 1 hour
+    https_only=on_render, # 👈 AUTOMATIC SWITCH: True on Server, False on Laptop
     same_site="lax"
 )
 
-# --- 3. MOUNT STATIC FILES (CRITICAL FOR CSS) --- 
-# This tells FastAPI: "If browser asks for /static/x, look in CLIENT_DIR for x"
+# --- 2. TEMPLATES & STATIC ---
 app.mount("/static", StaticFiles(directory=CLIENT_DIR), name="static")
 app.mount("/login-static", StaticFiles(directory=LOGIN_DIR), name="login_static")
-
 templates = Jinja2Templates(directory=CLIENT_DIR)
 login_templates = Jinja2Templates(directory=LOGIN_DIR)
 
-# --- 5. ADMIN SETUP ---
-class HeroAdmin(ModelView, model=Hero):
-    column_list = [Hero.id, Hero.name, Hero.secret_name]
-
-
-class UserAdmin(ModelView, model=User):
-    column_list = [User.id, User.username]
-    
-    form_args = {
-        "password_hash": {
-            "label": "Password (Leave blank to keep current)",
-            "render_kw": {"value": "", "autocomplete": "new-password"}
-        }
-    }
-
-    async def on_model_change(self, data, model, is_created, request):
-        # 1. Get the password typed in the form
-        incoming_password = data.get("password_hash")
-        
-        print(f"DEBUG: Incoming password is: {incoming_password}")  # 👈 Check your terminal for this!
-
-        # 2. Safety: If empty...
-        if not incoming_password:
-            if not is_created:
-                # If editing, remove key so we don't overwrite with empty string
-                del data["password_hash"]
-            print("DEBUG: Password empty, skipping.")
-            return
-
-        # 3. Safety: If it looks like an old hash (starts with $), ignore it
-        if len(incoming_password) == 60 and incoming_password.startswith("$"):
-            print("DEBUG: Detected existing hash. Ignoring.")
-            del data["password_hash"]
-            return
-
-        # 4. Hashing Logic
-        print("DEBUG: Hashing new password...")
-        hashed = get_password_hash(incoming_password)
-        
-        # 5. CRITICAL FIX: Update BOTH model and data
-        model.password_hash = hashed
-        data["password_hash"] = hashed  # 👈 This forces sqladmin to use the hash
-        
-        print(f"DEBUG: Password successfully hashed to: {hashed[:10]}...")
-
+# --- 3. ADMIN AUTHENTICATION (VIP LIST RESTORED) ---
 class AdminAuth(AuthenticationBackend):
     async def login(self, request: Request) -> bool:
         form = await request.form()
         username, password = form.get("username"), form.get("password")
 
-        # 👇 CHECK 1: Reject immediately if name is not "admin"
-        # CHANGE THE BLOCK TO THIS
+        # --- VIP LIST START ---
+        # 1. Define allowed users
         allowed_users = ["admin", "chickenman"]
-
+        
+        # 2. Check if username is in the list
         if username not in allowed_users:
-            print(f"🚫 Access Denied: '{username}' is not allowed.")
+            print(f"🚫 Access Denied: '{username}' is not in the VIP list.")
             return False
+        # --- VIP LIST END ---
 
-        print(f"🔐 ADMIN LOGIN ATTEMPT: {username}")
-
-        # Check DB
         with Session(engine) as session:
             user = session.exec(select(User).where(User.username == username)).first()
-            
-            if not user:
-                print("❌ User not found in DB")
-                return False
-            
-            if verify_password(password, user.password_hash):
-                print("✅ Password verified! Logging in...")
-                request.session.update({"user": user.username}) 
+            if user and verify_password(password, user.password_hash):
+                request.session.update({"user": user.username})
                 return True
-            else:
-                print("❌ Password incorrect")
-        
         return False
 
     async def logout(self, request: Request) -> bool:
@@ -128,80 +75,61 @@ class AdminAuth(AuthenticationBackend):
         return True
 
     async def authenticate(self, request: Request) -> bool:
-        # 1. Get the user from the cookie
         user = request.session.get("user")
         
-        # 2. Print who it is (Critical for debugging!)
-        print(f"🕵️ CHECKING SESSION: User is '{user}'")
-        
-        # 3. Define your VIP list
+        # --- VIP LIST CHECK FOR SESSION ---
         allowed_users = ["admin", "chickenman"]
         
-        # 4. Check if they are on the list
         if user in allowed_users:
             return True
             
-        # 5. Block everyone else
-        print(f"🚫 BLOCKING: '{user}' is not in the allowed list.")
         return False
-# Initialize the auth backend
-authentication_backend = AdminAuth(secret_key="same_secret_key_as_middleware")
+
+authentication_backend = AdminAuth(secret_key="super_secret_static_key")
+
+# --- 4. ADMIN PANEL SETUP ---
+class UserAdmin(ModelView, model=User):
+    column_list = [User.id, User.username]
+    form_args = dict(password_hash=dict(label="Password (Leave blank to keep current)"))
+
+    async def on_model_change(self, data, model, is_created, request):
+        incoming_password = data.get("password_hash")
+        if not incoming_password:
+            if not is_created: del data["password_hash"]
+            return
+        if len(incoming_password) == 60 and incoming_password.startswith("$"):
+            del data["password_hash"]
+            return
+        hashed = get_password_hash(incoming_password[:70])
+        model.password_hash = hashed
+
+class HeroAdmin(ModelView, model=Hero):
+    column_list = [Hero.id, Hero.name]
 
 admin = Admin(app, engine, authentication_backend=authentication_backend)
 admin.add_view(HeroAdmin)
 admin.add_view(UserAdmin)
 
-# --- 6. ROUTES ---
-
-# --- ROUTES ---
-
+# --- 5. ROUTES ---
 @app.get("/")
 async def read_root(request: Request, session: Session = Depends(get_session)):
     heroes = session.exec(select(Hero)).all()
-    return templates.TemplateResponse("homepage.html", {"request": request, "heroes": heroes})
-
-@app.post("/heroes/")
-async def create_hero(
-    name: str = Form(...),
-    secret_name: str = Form(...),
-    age: int = Form(None),
-    session: Session = Depends(get_session)
-):
-    hero = Hero(name=name, secret_name=secret_name, age=age)
-    session.add(hero)
-    session.commit()
-    return RedirectResponse(url="/", status_code=303)
-
-# --- LOGIN ROUTES ---
+    user = request.session.get("user")
+    return templates.TemplateResponse("homepage.html", { "request": request, "heroes": heroes, "user": user })
 
 @app.get("/login")
 async def login_page(request: Request):
     return login_templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/login")
-async def login_user(
-    username: str = Form(...), 
-    password: str = Form(...), 
-    session: Session = Depends(get_session)
-):
-    # Check DB for user
+async def login_user(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.username == username)).first()
-    
     if not user or not verify_password(password, user.password_hash):
         return "Invalid credentials!"
-        
+    request.session["user"] = user.username
     return RedirectResponse(url="/", status_code=303)
 
-
-
-@app.get("/debug-cookie")
-def debug_cookie():
-    response = Response(content="Check your cookies now!")
-    response.set_cookie(
-        key="test_cookie", 
-        value="it_worked", 
-        httponly=True, 
-        samesite="strict",  # 👈 Match the middleware
-        secure=False
-    )
-    return response
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/")
