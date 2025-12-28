@@ -128,15 +128,21 @@ class AdminAuth(AuthenticationBackend):
         return True
 
     async def authenticate(self, request: Request) -> bool:
+        # 1. Get the user from the cookie
         user = request.session.get("user")
         
-        # 👇 DEFINE YOUR VIP LIST HERE TOO
+        # 2. Print who it is (Critical for debugging!)
+        print(f"🕵️ CHECKING SESSION: User is '{user}'")
+        
+        # 3. Define your VIP list
         allowed_users = ["admin", "chickenman"]
         
-        # Check if the user is in the list
+        # 4. Check if they are on the list
         if user in allowed_users:
             return True
             
+        # 5. Block everyone else
+        print(f"🚫 BLOCKING: '{user}' is not in the allowed list.")
         return False
 # Initialize the auth backend
 authentication_backend = AdminAuth(secret_key="same_secret_key_as_middleware")
