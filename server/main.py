@@ -97,8 +97,11 @@ class AdminAuth(AuthenticationBackend):
         username, password = form.get("username"), form.get("password")
 
         # 👇 CHECK 1: Reject immediately if name is not "admin"
-        if username != "chickenman":
-            print(f"🚫 Access Denied: '{username}' is not allowed in Admin Panel.")
+        # CHANGE THE BLOCK TO THIS
+        allowed_users = ["admin", "chickenman"]
+
+        if username not in allowed_users:
+            print(f"🚫 Access Denied: '{username}' is not allowed.")
             return False
 
         print(f"🔐 ADMIN LOGIN ATTEMPT: {username}")
