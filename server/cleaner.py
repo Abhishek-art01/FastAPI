@@ -55,8 +55,12 @@ def to_excel_operations(df):
 # --- PROCESSING LOGIC ---
 def process_dataframe(file_content):
     try:
+        # Try reading as standard Excel
         df = pd.read_excel(io.BytesIO(file_content), header=None)
-    except:
+        print("✅ Excel file loaded successfully.")
+    except Exception as e:
+        # 👇 THIS PRINT IS CRITICAL FOR DEBUGGING
+        print(f"❌ ERROR READING EXCEL: {e}") 
         return None, None, None
 
     df.drop(index=1, inplace=True)

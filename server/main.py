@@ -16,7 +16,7 @@ import zipfile
 # --- IMPORTS ---
 from .auth import verify_password, get_password_hash
 from .database import create_db_and_tables, get_session, engine
-from .models import BillingRecord, Hero, User
+from .models import BillingRecord, User
 from .cleaner import process_dataframe, to_excel_billing, to_excel_operations # 👈 Import from new file
 
 
@@ -24,6 +24,10 @@ from .cleaner import process_dataframe, to_excel_billing, to_excel_operations # 
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR.parent / "client" / "HomePage"
 LOGIN_DIR = BASE_DIR.parent / "client" / "LoginPage"
+CLEANER_DIR = BASE_DIR.parent / "client" / "DataCleaner"
+
+
+# 3. Setup Templates
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,8 +64,12 @@ app.add_middleware(
 # --- 2. TEMPLATES & STATIC ---
 app.mount("/static", StaticFiles(directory=CLIENT_DIR), name="static")
 app.mount("/login-static", StaticFiles(directory=LOGIN_DIR), name="login_static")
+app.mount("/cleaner-static", StaticFiles(directory=CLEANER_DIR), name="cleaner_static")
+
 templates = Jinja2Templates(directory=CLIENT_DIR)
 login_templates = Jinja2Templates(directory=LOGIN_DIR)
+cleaner_templates = Jinja2Templates(directory=CLEANER_DIR)
+
 
 # --- 3. ADMIN AUTHENTICATION (VIP LIST RESTORED) ---
 class AdminAuth(AuthenticationBackend):
@@ -129,24 +137,32 @@ class UserAdmin(ModelView, model=User):
         model.password_hash = hashed
         data["password_hash"] = hashed  # <--- Forces sqladmin to save the hash, not the plain text!
 
-class HeroAdmin(ModelView, model=Hero):
-    column_list = [Hero.id, Hero.name]
-
 admin = Admin(app, engine, authentication_backend=authentication_backend)
-admin.add_view(HeroAdmin)
 admin.add_view(UserAdmin)
 
 # --- 5. ROUTES ---
 @app.get("/")
 async def read_root(request: Request, session: Session = Depends(get_session)):
-    heroes = session.exec(select(Hero)).all()
     user = request.session.get("user")
-    return templates.TemplateResponse("homepage.html", { "request": request, "heroes": heroes, "user": user })
+    
+    # 1. Check if user is logged in
+    if not user:
+        # If NO user, kick them to /login
+        return RedirectResponse(url="/login", status_code=303)
+
+    # 2. If YES user, show the Dashboard
+    return templates.TemplateResponse("homepage.html", { 
+        "request": request, 
+        "user": user 
+    })
 
 @app.get("/login")
 async def login_page(request: Request):
+    # Optional: If they are already logged in, send them straight to Dashboard
+    if request.session.get("user"):
+        return RedirectResponse(url="/", status_code=303)
+        
     return login_templates.TemplateResponse("login.html", {"request": request})
-
 @app.post("/login")
 async def login_user(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.username == username)).first()
@@ -159,6 +175,16 @@ async def login_user(request: Request, username: str = Form(...), password: str 
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/")
+
+@app.get("/cleaner")
+async def cleaner_page(request: Request):
+    user = request.session.get("user")
+    
+    # Protect the route: Login Required
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+        
+    return cleaner_templates.TemplateResponse("DataCleaner.html", {"request": request, "user": user})
 
 @app.post("/clean-data")
 async def clean_data(file: UploadFile = File(...), session: Session = Depends(get_session)):
