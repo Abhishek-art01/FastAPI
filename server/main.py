@@ -12,6 +12,8 @@ import os
 from fastapi.middleware.cors import CORSMiddleware
 import io
 import zipfile
+from fastapi.responses import FileResponse # 👈 Add this import at top if missing
+
 
 # --- IMPORTS ---
 from .auth import verify_password, get_password_hash
@@ -176,27 +178,29 @@ async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/")
 
+# --- DATA CLEANER ROUTES ---
+
+
+# 1. Page Server
 @app.get("/cleaner")
 async def cleaner_page(request: Request):
     user = request.session.get("user")
-    
-    # Protect the route: Login Required
     if not user:
         return RedirectResponse(url="/login", status_code=303)
-        
     return cleaner_templates.TemplateResponse("DataCleaner.html", {"request": request, "user": user})
 
+# 2. Logic Server (Processes & Saves File)
 @app.post("/clean-data")
 async def clean_data(file: UploadFile = File(...), session: Session = Depends(get_session)):
     contents = await file.read()
     
-    # 1. Process Logic (Now running from cleaner.py)
-    billing_df, ops_df, filename = process_dataframe(contents)
+    # Process Logic
+    billing_df, ops_df, base_filename = process_dataframe(contents)
     
     if billing_df is None:
         return Response(content="Error processing file", status_code=400)
 
-    # 2. SAVE TO DATABASE
+    # SAVE TO DATABASE (Same as before)
     records = billing_df.to_dict(orient='records')
     db_entries = []
     for record in records:
@@ -219,24 +223,43 @@ async def clean_data(file: UploadFile = File(...), session: Session = Depends(ge
             reporting_location=str(record.get('REPORTING_LOCATION'))
         )
         db_entries.append(entry)
-    
     session.add_all(db_entries)
     session.commit()
 
-    # 3. Create Excel Files (Using imported functions)
+    # SAVE EXCEL FILES LOCALLY
+    # Ensure a 'generated' folder exists
+    generated_dir = BASE_DIR.parent / "client" / "DataCleaner" / "generated"
+    os.makedirs(generated_dir, exist_ok=True)
+
+    billing_filename = f"BILLING_{base_filename}.xlsx"
+    ops_filename = f"OPS_{base_filename}.xlsx"
+    
+    # Save Billing
     billing_excel = to_excel_billing(billing_df)
+    with open(generated_dir / billing_filename, "wb") as f:
+        f.write(billing_excel.read())
+
+    # Save Ops
     ops_excel = to_excel_operations(ops_df)
+    with open(generated_dir / ops_filename, "wb") as f:
+        f.write(ops_excel.read())
 
-    # 4. ZIP Files
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        zip_file.writestr(f"BILLING_{filename}.xlsx", billing_excel.read())
-        zip_file.writestr(f"OPS_{filename}.xlsx", ops_excel.read())
+    # Return JSON with filenames (Client will use these to request downloads)
+    return {
+        "status": "success",
+        "billing_file": billing_filename,
+        "ops_file": ops_filename
+    }
 
-    # 5. Return Response
-    zip_buffer.seek(0)
-    return Response(
-        content=zip_buffer.read(),
-        media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=Cleaned_Data_{filename}.zip"}
-    )
+# 3. Secure Download Endpoint
+@app.get("/download/{filename}")
+async def download_file(filename: str, request: Request):
+    user = request.session.get("user")
+    if not user:
+        return Response("Unauthorized", status_code=401)
+    
+    file_path = BASE_DIR.parent / "client" / "DataCleaner" / "generated" / filename
+    if not file_path.exists():
+        return Response("File not found", status_code=404)
+
+    return FileResponse(path=file_path, filename=filename, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

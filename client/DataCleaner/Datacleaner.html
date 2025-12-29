@@ -16,21 +16,35 @@
             <div class="header">
                 <i class="fa-solid fa-plane-departure logo-icon"></i>
                 <h1>TripSheet Cleaner</h1>
-                <p>Upload raw Excel, get Billing & Ops files instantly.</p>
+                <p>Upload raw Excel to generate Billing & Ops reports.</p>
             </div>
 
             <div class="upload-area" id="drop-zone">
                 <input type="file" id="fileInput" accept=".xlsx, .xls" hidden>
                 <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
-                <p>Drag & Drop your Excel file here</p>
-                <span>or</span>
+                <p>Drag & Drop Excel file</p>
                 <button class="btn-select" onclick="document.getElementById('fileInput').click()">Browse Files</button>
                 <p class="file-name" id="fileName"></p>
             </div>
 
             <button class="btn-process" id="processBtn" disabled>
-                <i class="fa-solid fa-gears"></i> Process & Save Data
+                <i class="fa-solid fa-gears"></i> Process Data
             </button>
+
+            <div id="downloadSection" class="download-section" style="display: none;">
+                <p class="success-text"><i class="fa-solid fa-check-circle"></i> Processing Complete!</p>
+
+                <div class="button-group">
+                    <a id="btnBilling" class="btn-download blue" href="#" target="_blank">
+                        <i class="fa-solid fa-file-invoice-dollar"></i> Billing File
+                    </a>
+                    <a id="btnOps" class="btn-download green" href="#" target="_blank">
+                        <i class="fa-solid fa-bus"></i> Ops File
+                    </a>
+                </div>
+
+                <button class="btn-reset" onclick="location.reload()">Process Another File</button>
+            </div>
 
             <div id="status" class="status-msg"></div>
         </div>
@@ -41,32 +55,21 @@
         const processBtn = document.getElementById('processBtn');
         const fileNameDisplay = document.getElementById('fileName');
         const statusDiv = document.getElementById('status');
-        const dropZone = document.getElementById('drop-zone');
+        const downloadSection = document.getElementById('downloadSection');
+        const btnBilling = document.getElementById('btnBilling');
+        const btnOps = document.getElementById('btnOps');
 
-        // Handle File Selection
+        // File Selection Logic
         fileInput.addEventListener('change', () => {
             if (fileInput.files.length > 0) {
                 fileNameDisplay.textContent = fileInput.files[0].name;
                 processBtn.disabled = false;
                 processBtn.classList.add('active');
+                downloadSection.style.display = 'none'; // Hide results if new file selected
             }
         });
 
-        // Drag & Drop
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('highlight'); });
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight'));
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('highlight');
-            if (e.dataTransfer.files.length) {
-                fileInput.files = e.dataTransfer.files;
-                fileNameDisplay.textContent = e.dataTransfer.files[0].name;
-                processBtn.disabled = false;
-                processBtn.classList.add('active');
-            }
-        });
-
-        // Handle Upload
+        // Upload Logic
         processBtn.addEventListener('click', async () => {
             const file = fileInput.files[0];
             if (!file) return;
@@ -74,41 +77,36 @@
             const formData = new FormData();
             formData.append('file', file);
 
+            // UI Loading State
             processBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
             processBtn.disabled = true;
             statusDiv.textContent = "";
 
             try {
-                // Change URL to your Render URL if deployed
-                const response = await fetch('http://127.0.0.1:8000/clean-data', {
+                const response = await fetch('/clean-data', {
                     method: 'POST',
                     body: formData
                 });
 
                 if (response.ok) {
-                    // Create Download Link
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    // Get filename from header if possible, else default
-                    const header = response.headers.get('Content-Disposition');
-                    const filename = header ? header.split('filename=')[1] : "Processed_Files.zip";
+                    const data = await response.json(); // Get JSON response
 
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
+                    // Setup Download Links
+                    btnBilling.href = `/download/${data.billing_file}`;
+                    btnOps.href = `/download/${data.ops_file}`;
 
-                    statusDiv.innerHTML = '<span style="color: #10b981;"><i class="fa-solid fa-check-circle"></i> Success! Data saved to DB & Files downloaded.</span>';
+                    // Show Download Buttons
+                    downloadSection.style.display = 'block';
+                    processBtn.style.display = 'none'; // Hide process button
+
                 } else {
-                    statusDiv.innerHTML = '<span style="color: #ef4444;">Error processing file. Check format.</span>';
+                    statusDiv.innerHTML = '<span style="color: #ef4444;">Error processing file.</span>';
+                    processBtn.innerHTML = '<i class="fa-solid fa-gears"></i> Retry';
+                    processBtn.disabled = false;
                 }
             } catch (error) {
                 console.error(error);
-                statusDiv.innerHTML = '<span style="color: #ef4444;">Server error. Is the backend running?</span>';
-            } finally {
-                processBtn.innerHTML = '<i class="fa-solid fa-gears"></i> Process & Save Data';
+                statusDiv.innerHTML = '<span style="color: #ef4444;">Server connection failed.</span>';
                 processBtn.disabled = false;
             }
         });
