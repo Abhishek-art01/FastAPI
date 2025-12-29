@@ -187,7 +187,7 @@ async def cleaner_page(request: Request):
     user = request.session.get("user")
     if not user:
         return RedirectResponse(url="/login", status_code=303)
-    return cleaner_templates.TemplateResponse("DataCleaner.html", {"request": request, "user": user})
+    return cleaner_templates.TemplateResponse("Datacleaner.html", {"request": request, "user": user})
 
 # 2. Logic Server (Processes & Saves File)
 @app.post("/clean-data")
