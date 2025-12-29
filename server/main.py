@@ -94,14 +94,24 @@ class UserAdmin(ModelView, model=User):
 
     async def on_model_change(self, data, model, is_created, request):
         incoming_password = data.get("password_hash")
+        
+        # 1. Safety Checks
         if not incoming_password:
             if not is_created: del data["password_hash"]
             return
+
+        # 2. Ignore if it is already a hash
         if len(incoming_password) == 60 and incoming_password.startswith("$"):
             del data["password_hash"]
             return
+
+        # 3. Hash the password
         hashed = get_password_hash(incoming_password[:70])
+        
+        # 4. 👇 THIS IS THE MISSING FIX
+        # We must update BOTH the model object AND the data dictionary
         model.password_hash = hashed
+        data["password_hash"] = hashed  # <--- Forces sqladmin to save the hash, not the plain text!
 
 class HeroAdmin(ModelView, model=Hero):
     column_list = [Hero.id, Hero.name]
