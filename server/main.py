@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Request, Form, Response
+from fastapi import FastAPI, Depends, Request, Form, Response, UploadFile, File
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -9,11 +9,16 @@ from sqladmin.authentication import AuthenticationBackend
 from pathlib import Path
 from contextlib import asynccontextmanager
 import os
+from fastapi.middleware.cors import CORSMiddleware
+import io
+import zipfile
 
-# Import local modules
-from .database import engine, get_session, create_db_and_tables
-from .models import Hero, User
+# --- IMPORTS ---
 from .auth import verify_password, get_password_hash
+from .database import create_db_and_tables, get_session, engine
+from .models import BillingRecord, Hero, User
+from .cleaner import process_dataframe, to_excel_billing, to_excel_operations # 👈 Import from new file
+
 
 # --- SETUP PATHS ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,6 +33,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # --- 1. MIDDLEWARE (The Fix for Render) ---
+
+# 1. CORS Middleware (For Frontend Communication)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
+
+# 2. Session Middleware (For Cookies)
 # We check if we are on Render by looking for the 'RENDER' environment variable.
 # If on Render -> Secure Cookies (https_only=True)
 # If on Laptop -> Normal Cookies (https_only=False)
@@ -143,3 +159,58 @@ async def login_user(request: Request, username: str = Form(...), password: str 
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/")
+
+@app.post("/clean-data")
+async def clean_data(file: UploadFile = File(...), session: Session = Depends(get_session)):
+    contents = await file.read()
+    
+    # 1. Process Logic (Now running from cleaner.py)
+    billing_df, ops_df, filename = process_dataframe(contents)
+    
+    if billing_df is None:
+        return Response(content="Error processing file", status_code=400)
+
+    # 2. SAVE TO DATABASE
+    records = billing_df.to_dict(orient='records')
+    db_entries = []
+    for record in records:
+        entry = BillingRecord(
+            trip_date=str(record.get('TRIP_DATE')),
+            trip_id=str(record.get('TRIP_ID')),
+            flight_no=str(record.get('FLIGHT_NO.')),
+            employee_id=str(record.get('EMPLOYEE_ID')),
+            employee_name=str(record.get('EMPLOYEE_NAME')),
+            gender=str(record.get('GENDER')),
+            address=str(record.get('ADDRESS')),
+            passenger_mobile=str(record.get('PASSENGER_MOBILE')),
+            landmark=str(record.get('LANDMARK')),
+            vehicle_no=str(record.get('VEHICLE_NO')),
+            direction=str(record.get('DIRECTION')),
+            shift_time=str(record.get('SHIFT_TIME')),
+            emp_count=record.get('EMP_COUNT'),
+            pax_no=str(record.get('PAX_NO')),
+            marshall=str(record.get('MARSHALL')),
+            reporting_location=str(record.get('REPORTING_LOCATION'))
+        )
+        db_entries.append(entry)
+    
+    session.add_all(db_entries)
+    session.commit()
+
+    # 3. Create Excel Files (Using imported functions)
+    billing_excel = to_excel_billing(billing_df)
+    ops_excel = to_excel_operations(ops_df)
+
+    # 4. ZIP Files
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr(f"BILLING_{filename}.xlsx", billing_excel.read())
+        zip_file.writestr(f"OPS_{filename}.xlsx", ops_excel.read())
+
+    # 5. Return Response
+    zip_buffer.seek(0)
+    return Response(
+        content=zip_buffer.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=Cleaned_Data_{filename}.zip"}
+    )

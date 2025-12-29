@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+body {
+    background-color: #f3f4f6;
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.container {
+    width: 100%;
+    max-width: 450px;
+    padding: 20px;
+}
+
+.card {
+    background: white;
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.logo-icon {
+    font-size: 3rem;
+    color: #ef4444;
+    /* Air India Redish */
+    margin-bottom: 10px;
+}
+
+.header h1 {
+    font-size: 1.5rem;
+    color: #111827;
+    margin: 0;
+}
+
+.header p {
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-top: 5px;
+}
+
+.upload-area {
+    margin-top: 30px;
+    border: 2px dashed #e5e7eb;
+    border-radius: 12px;
+    padding: 30px;
+    transition: all 0.3s ease;
+}
+
+.upload-area.highlight {
+    border-color: #ef4444;
+    background-color: #fef2f2;
+}
+
+.upload-icon {
+    font-size: 2.5rem;
+    color: #9ca3af;
+    margin-bottom: 10px;
+}
+
+.btn-select {
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #374151;
+    transition: all 0.2s;
+}
+
+.btn-select:hover {
+    background-color: #f9fafb;
+    border-color: #9ca3af;
+}
+
+.file-name {
+    margin-top: 15px;
+    font-size: 0.85rem;
+    color: #1f2937;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.btn-process {
+    width: 100%;
+    margin-top: 25px;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background-color: #e5e7eb;
+    color: #9ca3af;
+    font-weight: 600;
+    cursor: not-allowed;
+    transition: all 0.3s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-process.active {
+    background-color: #ef4444;
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.4);
+}
+
+.btn-process.active:hover {
+    background-color: #dc2626;
+    transform: translateY(-1px);
+}
+
+.status-msg {
+    margin-top: 20px;
+    font-size: 0.9rem;
+    min-height: 20px;
+}

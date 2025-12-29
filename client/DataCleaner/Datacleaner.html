@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air India TripSheet Cleaner</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <i class="fa-solid fa-plane-departure logo-icon"></i>
+                <h1>TripSheet Cleaner</h1>
+                <p>Upload raw Excel, get Billing & Ops files instantly.</p>
+            </div>
+
+            <div class="upload-area" id="drop-zone">
+                <input type="file" id="fileInput" accept=".xlsx, .xls" hidden>
+                <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                <p>Drag & Drop your Excel file here</p>
+                <span>or</span>
+                <button class="btn-select" onclick="document.getElementById('fileInput').click()">Browse Files</button>
+                <p class="file-name" id="fileName"></p>
+            </div>
+
+            <button class="btn-process" id="processBtn" disabled>
+                <i class="fa-solid fa-gears"></i> Process & Save Data
+            </button>
+
+            <div id="status" class="status-msg"></div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const processBtn = document.getElementById('processBtn');
+        const fileNameDisplay = document.getElementById('fileName');
+        const statusDiv = document.getElementById('status');
+        const dropZone = document.getElementById('drop-zone');
+
+        // Handle File Selection
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                fileNameDisplay.textContent = fileInput.files[0].name;
+                processBtn.disabled = false;
+                processBtn.classList.add('active');
+            }
+        });
+
+        // Drag & Drop
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('highlight'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('highlight');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                fileNameDisplay.textContent = e.dataTransfer.files[0].name;
+                processBtn.disabled = false;
+                processBtn.classList.add('active');
+            }
+        });
+
+        // Handle Upload
+        processBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            processBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+            processBtn.disabled = true;
+            statusDiv.textContent = "";
+
+            try {
+                // Change URL to your Render URL if deployed
+                const response = await fetch('http://127.0.0.1:8000/clean-data', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    // Create Download Link
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    // Get filename from header if possible, else default
+                    const header = response.headers.get('Content-Disposition');
+                    const filename = header ? header.split('filename=')[1] : "Processed_Files.zip";
+
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    statusDiv.innerHTML = '<span style="color: #10b981;"><i class="fa-solid fa-check-circle"></i> Success! Data saved to DB & Files downloaded.</span>';
+                } else {
+                    statusDiv.innerHTML = '<span style="color: #ef4444;">Error processing file. Check format.</span>';
+                }
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerHTML = '<span style="color: #ef4444;">Server error. Is the backend running?</span>';
+            } finally {
+                processBtn.innerHTML = '<i class="fa-solid fa-gears"></i> Process & Save Data';
+                processBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>
