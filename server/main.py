@@ -1,41 +1,42 @@
+import os
+import io
+from pathlib import Path
+from contextlib import asynccontextmanager
+from typing import List, Optional
+
 from fastapi import FastAPI, Depends, Request, Form, Response, UploadFile, File
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from sqlmodel import select, Session, desc
+
+# SQLModel imports (Including 'col' for bulk filtering)
+from sqlmodel import select, Session, desc, col 
+
 from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
-from pathlib import Path
-from contextlib import asynccontextmanager
-import os
-from fastapi.middleware.cors import CORSMiddleware
-import io
-import zipfile
-from fastapi.responses import FileResponse # 👈 Add this import at top if missing
-from .models import TripData 
 from pydantic import BaseModel
-import math
-from typing import Optional
 
-
-# --- IMPORTS ---
+# --- INTERNAL IMPORTS ---
 from .auth import verify_password, get_password_hash
 from .database import create_db_and_tables, get_session, engine
-from .models import BillingRecord, User
-from .cleaner import process_dataframe, to_excel_billing, to_excel_operations # 👈 Import from new file
+from .models import User, ClientData, RawTripData, OperationData, TripData
+from .cleaner import process_client_data, process_raw_data, process_operation_data
 
-
-# --- SETUP PATHS ---
+# --- 1. CONFIGURATION & PATHS ---
 BASE_DIR = Path(__file__).resolve().parent
-CLIENT_DIR = BASE_DIR.parent / "client" / "HomePage"
-LOGIN_DIR = BASE_DIR.parent / "client" / "LoginPage"
-CLEANER_DIR = BASE_DIR.parent / "client" / "DataCleaner"
-GPS_DIR = BASE_DIR.parent / "client" / "GPSCorner"
+CLIENT_DIR = BASE_DIR.parent / "client"
 
+# Dictionary to manage all paths cleanly
+DIRS = {
+    "home": CLIENT_DIR / "HomePage",
+    "login": CLIENT_DIR / "LoginPage",
+    "cleaner": CLIENT_DIR / "DataCleaner",
+    "gps": CLIENT_DIR / "GPSCorner"
+}
 
-# 3. Setup Templates
-
+# --- 2. LIFESPAN (Startup) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
@@ -43,85 +44,51 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# --- 1. MIDDLEWARE (The Fix for Render) ---
-
-# 1. CORS Middleware (For Frontend Communication)
+# --- 3. MIDDLEWARE ---
+# 1. CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# 2. Session Middleware (For Cookies)
-# We check if we are on Render by looking for the 'RENDER' environment variable.
-# If on Render -> Secure Cookies (https_only=True)
-# If on Laptop -> Normal Cookies (https_only=False)
+# 2. Session (Secure on Render, Lax on Localhost)
 on_render = os.environ.get("RENDER") is not None
-
 app.add_middleware(
     SessionMiddleware,
     secret_key="super_secret_static_key",
-    max_age=3600,       # 1 hour
-    https_only=on_render, # 👈 AUTOMATIC SWITCH: True on Server, False on Laptop
+    max_age=3600, 
+    https_only=on_render, 
     same_site="lax"
 )
 
-# --- 2. TEMPLATES & STATIC ---
-app.mount("/static", StaticFiles(directory=CLIENT_DIR), name="static")
-app.mount("/login-static", StaticFiles(directory=LOGIN_DIR), name="login_static")
-app.mount("/cleaner-static", StaticFiles(directory=CLEANER_DIR), name="cleaner_static")
-app.mount("/gps-static", StaticFiles(directory=GPS_DIR), name="gps_static")
+# --- 4. STATIC FILES & TEMPLATES ---
+# Mount static folders for CSS/JS
+app.mount("/static", StaticFiles(directory=DIRS["home"]), name="static")
+app.mount("/login-static", StaticFiles(directory=DIRS["login"]), name="login_static")
+app.mount("/cleaner-static", StaticFiles(directory=DIRS["cleaner"]), name="cleaner_static")
+app.mount("/gps-static", StaticFiles(directory=DIRS["gps"]), name="gps_static")
 
-templates = Jinja2Templates(directory=CLIENT_DIR)
-login_templates = Jinja2Templates(directory=LOGIN_DIR)
-cleaner_templates = Jinja2Templates(directory=CLEANER_DIR)
-gps_templates = Jinja2Templates(directory=GPS_DIR)
+# Setup Templates
+templates = {
+    "home": Jinja2Templates(directory=DIRS["home"]),
+    "login": Jinja2Templates(directory=DIRS["login"]),
+    "cleaner": Jinja2Templates(directory=DIRS["cleaner"]),
+    "gps": Jinja2Templates(directory=DIRS["gps"]),
+}
 
-#Some Helper Functions
-
-def safe_str(value):
-    """Converts value to string, but returns None if empty or 'nan'."""
-    if value is None or (isinstance(value, float) and math.isnan(value)) or str(value).strip() == "":
-        return None
-    return str(value).strip()
-
-def safe_float(value):
-    """Converts value to float, returns None if empty."""
-    if value is None or value == "" or (isinstance(value, float) and math.isnan(value)):
-        return None
-    try:
-        return float(value)
-    except:
-        return None
-
-def safe_int(value):
-    """Converts value to int, returns None if empty."""
-    if value is None or value == "" or (isinstance(value, float) and math.isnan(value)):
-        return None
-    try:
-        return int(float(value))
-    except:
-        return None
-
-
-
-# --- 3. ADMIN AUTHENTICATION (VIP LIST RESTORED) ---
+# --- 5. AUTHENTICATION BACKEND ---
 class AdminAuth(AuthenticationBackend):
     async def login(self, request: Request) -> bool:
         form = await request.form()
         username, password = form.get("username"), form.get("password")
-
-        # --- VIP LIST START ---
-        # 1. Define allowed users
-        allowed_users = ["admin", "chickenman"]
         
-        # 2. Check if username is in the list
+        # VIP Access Control
+        allowed_users = ["admin", "chickenman"]
         if username not in allowed_users:
-            print(f"🚫 Access Denied: '{username}' is not in the VIP list.")
             return False
-        # --- VIP LIST END ---
 
         with Session(engine) as session:
             user = session.exec(select(User).where(User.username == username)).first()
@@ -135,296 +102,195 @@ class AdminAuth(AuthenticationBackend):
         return True
 
     async def authenticate(self, request: Request) -> bool:
-        user = request.session.get("user")
-        
-        # --- VIP LIST CHECK FOR SESSION ---
-        allowed_users = ["admin", "chickenman"]
-        
-        if user in allowed_users:
-            return True
-            
-        return False
+        return request.session.get("user") in ["admin", "chickenman"]
 
-authentication_backend = AdminAuth(secret_key="super_secret_static_key")
-
-# --- 4. ADMIN PANEL SETUP ---
+# --- 6. ADMIN VIEWS ---
 class UserAdmin(ModelView, model=User):
     column_list = [User.id, User.username]
-    form_args = dict(password_hash=dict(label="Password (Leave blank to keep current)"))
+    form_args = dict(password_hash=dict(label="Password (Leave blank to keep)"))
 
     async def on_model_change(self, data, model, is_created, request):
-        incoming_password = data.get("password_hash")
-        
-        # 1. Safety Checks
-        if not incoming_password:
+        password = data.get("password_hash")
+        if not password:
             if not is_created: del data["password_hash"]
-            return
+        elif not (len(password) == 60 and password.startswith("$")):
+            hashed = get_password_hash(password)
+            model.password_hash = hashed
+            data["password_hash"] = hashed
 
-        # 2. Ignore if it is already a hash
-        if len(incoming_password) == 60 and incoming_password.startswith("$"):
-            del data["password_hash"]
-            return
+class TripDataAdmin(ModelView, model=TripData):
+    # Updated to match your models.py columns exactly
+    column_list = [TripData.date, TripData.trip_id, TripData.employee_name, TripData.cab_registration_no, TripData.trip_direction]
 
-        # 3. Hash the password
-        hashed = get_password_hash(incoming_password[:70])
-        
-        # 4. 👇 THIS IS THE MISSING FIX
-        # We must update BOTH the model object AND the data dictionary
-        model.password_hash = hashed
-        data["password_hash"] = hashed  # <--- Forces sqladmin to save the hash, not the plain text!
+# Simple views for the cleaned data tables
+class ClientDataAdmin(ModelView, model=ClientData): column_list = [ClientData.id, ClientData.trip_id, ClientData.employee_name]
+class RawTripDataAdmin(ModelView, model=RawTripData): column_list = [RawTripData.id, RawTripData.trip_id, RawTripData.trip_date]
+class OperationDataAdmin(ModelView, model=OperationData): column_list = [OperationData.id, OperationData.trip_id]
 
-admin = Admin(app, engine, authentication_backend=authentication_backend)
+# Initialize Admin
+admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key="super_secret_static_key"))
 admin.add_view(UserAdmin)
+admin.add_view(TripDataAdmin)
+admin.add_view(ClientDataAdmin)
+admin.add_view(RawTripDataAdmin)
+admin.add_view(OperationDataAdmin)
 
-# --- 5. ROUTES ---
+# --- 7. PAGE ROUTES ---
 @app.get("/")
-async def read_root(request: Request, session: Session = Depends(get_session)):
+async def read_root(request: Request):
     user = request.session.get("user")
-    
-    # 1. Check if user is logged in
     if not user:
-        # If NO user, kick them to /login
         return RedirectResponse(url="/login", status_code=303)
-
-    # 2. If YES user, show the Dashboard
-    return templates.TemplateResponse("homepage.html", { 
-        "request": request, 
-        "user": user 
-    })
+    return templates["home"].TemplateResponse("homepage.html", {"request": request, "user": user})
 
 @app.get("/login")
 async def login_page(request: Request):
-    # Optional: If they are already logged in, send them straight to Dashboard
     if request.session.get("user"):
         return RedirectResponse(url="/", status_code=303)
-        
-    return login_templates.TemplateResponse("login.html", {"request": request})
+    return templates["login"].TemplateResponse("login.html", {"request": request})
+
 @app.post("/login")
 async def login_user(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.username == username)).first()
-    if not user or not verify_password(password, user.password_hash):
-        return "Invalid credentials!"
-    request.session["user"] = user.username
-    return RedirectResponse(url="/", status_code=303)
+    if user and verify_password(password, user.password_hash):
+        request.session["user"] = user.username
+        return RedirectResponse(url="/", status_code=303)
+    return templates["login"].TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"})
 
 @app.get("/logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/")
 
-# --- DATA CLEANER ROUTES ---
-
-
-# 1. Page Server
 @app.get("/cleaner")
 async def cleaner_page(request: Request):
-    user = request.session.get("user")
-    if not user:
-        return RedirectResponse(url="/login", status_code=303)
-    return cleaner_templates.TemplateResponse("Datacleaner.html", {"request": request, "user": user})
+    if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
+    return templates["cleaner"].TemplateResponse("Datacleaner.html", {"request": request, "user": request.session.get("user")})
 
-# 2. Logic Server (Processes & Saves File)
-@app.post("/clean-data")
-async def clean_data(file: UploadFile = File(...), session: Session = Depends(get_session)):
-    contents = await file.read()
-    
-    # Process Logic
-    billing_df, ops_df, base_filename = process_dataframe(contents)
-    
-    if billing_df is None:
-        return Response(content="Error processing file", status_code=400)
-
-    # SAVE TO DATABASE (Same as before)
-
-    records = billing_df.to_dict(orient='records')
-    db_entries = []
-
-    for record in records:
-        entry = BillingRecord(
-            # --- TEXT FIELDS (Use safe_str) ---
-            trip_date=safe_str(record.get('TRIP_DATE')),
-            trip_id=safe_str(record.get('TRIP_ID')),
-            flight_no=safe_str(record.get('FLIGHT_NO.')),
-            employee_id=safe_str(record.get('EMPLOYEE_ID')),
-            employee_name=safe_str(record.get('EMPLOYEE_NAME')),
-            gender=safe_str(record.get('GENDER')),
-            address=safe_str(record.get('ADDRESS')),
-            passenger_mobile=safe_str(record.get('PASSENGER_MOBILE')),
-            landmark=safe_str(record.get('LANDMARK')),
-            vehicle_no=safe_str(record.get('VEHICLE_NO')),
-            direction=safe_str(record.get('DIRECTION')),
-            shift_time=safe_str(record.get('SHIFT_TIME')),
-            pax_no=safe_str(record.get('PAX_NO')),
-            marshall=safe_str(record.get('MARSHALL')),
-            reporting_location=safe_str(record.get('REPORTING_LOCATION')),
-
-            # --- NUMERIC FIELDS (Use safe_float or safe_int) ---
-            # This fixes the "invalid input syntax" error
-            emp_count=safe_float(record.get('EMP_COUNT')) 
-        )
-        db_entries.append(entry)
-
-    session.add_all(db_entries)
-    session.commit()
-
-    # SAVE EXCEL FILES LOCALLY
-    # Ensure a 'generated' folder exists
-    generated_dir = BASE_DIR.parent / "client" / "DataCleaner" / "generated"
-    os.makedirs(generated_dir, exist_ok=True)
-
-    billing_filename = f"BILLING_{base_filename}.xlsx"
-    ops_filename = f"OPS_{base_filename}.xlsx"
-    
-    # Save Billing
-    billing_excel = to_excel_billing(billing_df)
-    with open(generated_dir / billing_filename, "wb") as f:
-        f.write(billing_excel.read())
-
-    # Save Ops
-    ops_excel = to_excel_operations(ops_df)
-    with open(generated_dir / ops_filename, "wb") as f:
-        f.write(ops_excel.read())
-
-    # Return JSON with filenames (Client will use these to request downloads)
-    return {
-        "status": "success",
-        "billing_file": billing_filename,
-        "ops_file": ops_filename
-    }
-
-# 3. Secure Download Endpoint
-@app.get("/download/{filename}")
-async def download_file(filename: str, request: Request):
-    user = request.session.get("user")
-    if not user:
-        return Response("Unauthorized", status_code=401)
-    
-    file_path = BASE_DIR.parent / "client" / "DataCleaner" / "generated" / filename
-    if not file_path.exists():
-        return Response("File not found", status_code=404)
-
-    return FileResponse(path=file_path, filename=filename, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-
-
-
-class TripDataAdmin(ModelView, model=TripData):
-    column_list = [
-        TripData.date, 
-        TripData.trip_id, 
-        TripData.employee_name, 
-        TripData.arrival_time, 
-        TripData.leave_time,
-        TripData.departure_or_parking_time,
-        TripData.gps_remarks,
-        TripData.una,
-        TripData.route_missing,
-        TripData.clubbing_missing,
-        TripData.one_side,
-        TripData.two_side,
-        TripData.club_km,
-        TripData.passed,
-        TripData.b2b_deducted,
-        TripData.total_km_pass,
-        TripData.billable_count,
-        TripData.vendor,
-        TripData.reporting_at,
-        TripData.staff_count,
-        TripData.mis_remarks,
-        TripData.bb,
-        TripData.dd,
-        TripData.team_type,
-        TripData.gender,
-        TripData.address,
-        TripData.locality,
-        TripData.cab_registration_no,
-        TripData.cab_last_digit,
-        TripData.cab_type,
-        TripData.trip_direction,
-        TripData.shift_time,
-        TripData.marshall,
-        TripData.employee_id,
-        TripData.flight_number,
-        TripData.one_side,
-        TripData.two_side,
-        TripData.club_km,
-        TripData.passed,
-        TripData.b2b_deducted,
-        TripData.total_km_pass,
-        TripData.billable_count,
-        TripData.vendor,
-        TripData.reporting_at,
-        TripData.staff_count,
-        TripData.mis_remarks,
-        TripData.bb,
-        TripData.una,
-        TripData.route_missing,
-        TripData.clubbing_missing,
-        TripData.arrival_time,
-        TripData.leave_time,
-        TripData.departure_or_parking_time,
-        TripData.gps_remarks,
-    ]
-
-# 3. Add it to the admin app
-admin.add_view(TripDataAdmin)
-
-# --- 2. SERVE THE HTML PAGE ---
 @app.get("/gps-corner")
 async def gps_page(request: Request):
-    user = request.session.get("user")
-    if not user:
-        return RedirectResponse(url="/login", status_code=303)
-    return gps_templates.TemplateResponse("gps_corner.html", {"request": request, "user": user})
+    if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
+    return templates["gps"].TemplateResponse("gps_corner.html", {"request": request, "user": request.session.get("user")})
 
-# --- 3. API: FETCH DATA ---
-@app.get("/api/gps-data")
-async def get_gps_data(
-    date: str = None, 
-    direction: str = None, 
-    cab: str = None, 
-    clubbing: str = None,
-    page: int = 1,       # 👈 New: Accepts Page Number
-    limit: int = 50,     # 👈 New: Accepts Limit (Default 50)
+# ==========================================
+# 🚀 DATA CLEANER API (OPTIMIZED)
+# ==========================================
+@app.post("/clean-data")
+async def clean_data(
+    files: List[UploadFile] = File(...),
+    cleanerType: str = Form(...),
     session: Session = Depends(get_session)
 ):
-    query = select(TripData)
-    
-    # 1. DATE FILTER (Fixing the format mismatch)
-    if date:
-        # The HTML sends "YYYY-MM-DD", but your DB likely has "DD-MM-YYYY"
-        try:
-            parts = date.split("-")
-            # If input is 2025-02-11, convert to 11-02-2025
-            if len(parts[0]) == 4: 
-                formatted_date = f"{parts[2]}-{parts[1]}-{parts[0]}"
-                query = query.where(TripData.date == formatted_date)
-            else:
-                query = query.where(TripData.date == date)
-        except:
-            pass # Ignore errors if date is weird
+    try:
+        print(f"🚀 Processing {len(files)} files with mode: {cleanerType}")
+        
+        df_result = None
+        excel_output = None
+        filename = "output.xlsx"
+
+        # --- A. CLIENT DATA ---
+        if cleanerType == "client":
+            content = await files[0].read()
+            df_result, excel_output, filename = process_client_data(content)
             
-    # 2. OTHER FILTERS
-    if direction and direction != "All":
-        query = query.where(TripData.trip_direction == direction)
-    if cab:
-        # Case insensitive search for Cab No
-        query = query.where(TripData.vehicle_no.contains(cab))
-    if clubbing and clubbing != "All":
-        query = query.where(TripData.clubbing_missing == clubbing)
+            # BULK SAVE (Fast & Safe)
+            if df_result is not None and not df_result.empty and "unique_id" in df_result.columns:
+                # 1. Get IDs from File
+                incoming_ids = df_result["unique_id"].dropna().unique().tolist()
+                
+                # 2. Get IDs already in DB
+                existing_ids = set(session.exec(select(ClientData.unique_id).where(col(ClientData.unique_id).in_(incoming_ids))).all())
+                
+                # 3. Filter New Rows
+                new_rows = df_result[~df_result["unique_id"].isin(existing_ids)]
+                
+                # 4. Bulk Insert
+                if not new_rows.empty:
+                    records = [ClientData(**row.to_dict()) for _, row in new_rows.iterrows()]
+                    session.add_all(records)
+                    session.commit()
+                    print(f"✅ Client Data: Added {len(new_rows)} rows.")
+                else:
+                    print("⚠️ Client Data: No new unique rows found.")
 
-    # 3. SORTING & PAGINATION
-    # Sort by ID descending (Newest first)
-    query = query.order_by(desc(TripData.id))
-    
-    # Calculate Offset (Skip logic)
-    offset = (page - 1) * limit
-    query = query.offset(offset).limit(limit)
-    
-    results = session.exec(query).all()
-    return results
+        # --- B. RAW DATA ---
+        elif cleanerType == "raw":
+            file_data = []
+            for f in files:
+                content = await f.read()
+                file_data.append((f.filename, content))
 
-# --- 4. API: UPDATE DATA ---
+            df_result, excel_output, filename = process_raw_data(file_data)
+            
+            # BULK SAVE
+            if df_result is not None and not df_result.empty and "unique_id" in df_result.columns:
+                incoming_ids = df_result["unique_id"].dropna().unique().tolist()
+                existing_ids = set(session.exec(select(RawTripData.unique_id).where(col(RawTripData.unique_id).in_(incoming_ids))).all())
+                new_rows = df_result[~df_result["unique_id"].isin(existing_ids)]
+                
+                if not new_rows.empty:
+                    records = [RawTripData(**row.to_dict()) for _, row in new_rows.iterrows()]
+                    session.add_all(records)
+                    session.commit()
+                    print(f"✅ Raw Data: Added {len(new_rows)} rows.")
+                else:
+                    print("⚠️ Raw Data: No new unique rows found.")
+
+        # --- C. OPERATION DATA ---
+        elif cleanerType == "operation":
+            file_data = []
+            for f in files:
+                content = await f.read()
+                file_data.append((f.filename, content))
+                
+            # Note: process_operation_data returns None for df_result to skip DB save
+            df_result, excel_output, filename = process_operation_data(file_data)
+            
+            # 🛑 NO DATABASE SAVING FOR OPERATION DATA
+
+        # --- FINALIZE ---
+        if excel_output is None:
+            return Response("Error processing data", status_code=400)
+
+        # Save locally for download
+        generated_dir = DIRS["cleaner"] / "generated"
+        os.makedirs(generated_dir, exist_ok=True)
+        
+        save_path = generated_dir / filename
+        with open(save_path, "wb") as f:
+            f.write(excel_output.read())
+
+        row_count = len(df_result) if df_result is not None else "Formatting Only"
+        
+        return {
+            "status": "success",
+            "file_url": filename,
+            "rows_processed": row_count
+        }
+
+    except Exception as e:
+        print(f"❌ Server Error: {e}")
+        return Response(f"Internal Error: {e}", status_code=500)
+
+# --- DOWNLOAD ROUTE ---
+@app.get("/download/{filename}")
+async def download_file(filename: str, request: Request):
+    if not request.session.get("user"):
+        return Response("Unauthorized", status_code=401)
+    
+    file_path = DIRS["cleaner"] / "generated" / filename
+    if not file_path.exists():
+        return Response("File not found", status_code=404)
+        
+    return FileResponse(
+        path=file_path, 
+        filename=filename, 
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+# ==========================================
+# 9. GPS CORNER API
+# ==========================================
 class GPSUpdateModel(BaseModel):
     id: int
     arrival_time: Optional[str] = None
@@ -432,13 +298,47 @@ class GPSUpdateModel(BaseModel):
     leave_time: Optional[str] = None
     gps_remarks: Optional[str] = None
 
+@app.get("/api/gps-data")
+async def get_gps_data(
+    date: str = None, 
+    direction: str = None, 
+    cab: str = None, 
+    clubbing: str = None, 
+    page: int = 1, 
+    limit: int = 50, 
+    session: Session = Depends(get_session)
+):
+    query = select(TripData)
+    
+    # 1. Date Filter
+    if date:
+        try:
+            parts = date.split("-")
+            formatted_date = f"{parts[2]}-{parts[1]}-{parts[0]}" if len(parts[0]) == 4 else date
+            query = query.where(TripData.date == formatted_date)
+        except:
+            pass 
+
+    # 2. Other Filters
+    if direction and direction != "All":
+        query = query.where(TripData.trip_direction == direction)
+    if cab:
+        query = query.where(TripData.vehicle_no.contains(cab))
+    if clubbing and clubbing != "All":
+        query = query.where(TripData.clubbing_missing == clubbing)
+
+    # 3. Sorting & Pagination
+    query = query.order_by(desc(TripData.id))
+    query = query.offset((page - 1) * limit).limit(limit)
+    
+    return session.exec(query).all()
+
 @app.post("/api/gps-update")
 async def update_gps_data(data: GPSUpdateModel, session: Session = Depends(get_session)):
     trip = session.get(TripData, data.id)
     if not trip:
         return Response("Trip not found", status_code=404)
     
-    # Update Fields
     trip.arrival_time = data.arrival_time
     trip.departure_parking_time = data.departure_parking_time
     trip.leave_time = data.leave_time
