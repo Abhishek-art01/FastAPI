@@ -182,3 +182,64 @@ class OperationData(SQLModel, table=True):
     clubbing_status: Optional[str] = None
     gps_time: Optional[str] = None
     gps_remark: Optional[str] = None
+
+class t3_address_locality(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    address: Optional[str] = None
+    locality: Optional[str] = None
+
+class t3_locality_zone(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    locality: Optional[str] = None
+    zone: Optional[str] = None
+
+class t3_zone_km(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    zone: Optional[str] = None
+    km: Optional[str] = None
+
+
+
+class AITA75_35_address_locality(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    address: Optional[str] = None
+    locality: Optional[str] = None
+
+class AITA75_35_locality_zone(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    locality: Optional[str] = None
+    zone: Optional[str] = None
+
+class AITA75_35_zone_km(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    zone: Optional[str] = None
+    km: Optional[str] = None    
+
+class AITA_VATIKA_address_locality(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    address: Optional[str] = None
+    locality: Optional[str] = None
+
+class AITA_VATIKA_locality_zone(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    locality: Optional[str] = None
+    zone: Optional[str] = None
+
+class AITA_VATIKA_zone_km(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    zone: Optional[str] = None
+    km: Optional[str] = None    
+
+class vehicle_master(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    vehicle_id: Optional[str] = None
+    vehicle_no: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    vehicle_registration_no: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    vehicle_owner: Optional[str] = None
+    vehicle_owner_name: Optional[str] = None
+    vehicle_owner_mobile: Optional[str] = None
+    vehicle_driver_name: Optional[str] = None
+    vehicle_driver_mobile: Optional[str] = None
+    vehicle_rc: Optional[str] = None
