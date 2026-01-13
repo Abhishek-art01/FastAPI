@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Management Center</title>
+    <link rel="stylesheet" href="operation_manager.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+
+    <div class="main-container">
+
+        <header class="page-header">
+            <div class="header-content">
+                <h1><i class="fa-solid fa-server"></i> Data Management Center</h1>
+                <p>Central hub for uploading source files and downloading standardized database reports.</p>
+            </div>
+            <a href="/" class="back-btn"><i class="fa-solid fa-house"></i> Dashboard</a>
+        </header>
+
+        <div class="dashboard-grid">
+
+            <div class="card upload-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-cloud-arrow-up"></i> Upload Data</h2>
+                    <span class="badge">Operation</span>
+                </div>
+                <div class="card-body">
+                    <p class="instruction">Select a raw <strong>Operation .xls</strong> file to clean and import.</p>
+
+                    <div class="drop-zone" id="dropZone">
+                        <i class="fa-solid fa-file-excel file-icon"></i>
+                        <input type="file" id="opUploadInput" accept=".xls,.xlsx">
+                        <p class="drop-text" id="fileLabel">Click to browse file</p>
+                    </div>
+
+                    <div class="actions">
+                        <button onclick="uploadOperationData()" id="uploadBtn" class="action-btn upload-btn">
+                            <i class="fa-solid fa-upload"></i> Process & Save to DB
+                        </button>
+                    </div>
+
+                    <div id="statusArea" class="status-area" style="display: none;">
+                        <div class="loader"></div>
+                        <span id="statusText"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card download-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-cloud-arrow-down"></i> Download Reports</h2>
+                    <span class="badge green">Database</span>
+                </div>
+                <div class="card-body">
+                    <p class="instruction">Select a database table to export as a formatted Excel file.</p>
+
+                    <div class="form-group">
+                        <label for="tableSelect">Select Table Source:</label>
+                        <div class="select-wrapper">
+                            <select id="tableSelect">
+                                <option value="operation">📂 Operation Data (Cleaned)</option>
+                                <option value="client">👥 Client Data (Cleaned)</option>
+                                <option value="raw">🚙 Raw Trip Data (Cleaned)</option>
+                                <option value="trip_data">📍 Master Trip Data (GPS)</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down arrow-icon"></i>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button onclick="downloadSelectedTable()" class="action-btn download-btn">
+                            <i class="fa-solid fa-file-export"></i> Download Selected Table
+                        </button>
+                    </div>
+
+                    <div class="info-box">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <span>Files are generated in real-time from the SQL Database.</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // 1. File Input Visuals
+        const fileInput = document.getElementById('opUploadInput');
+        const fileLabel = document.getElementById('fileLabel');
+
+        fileInput.addEventListener('change', function () {
+            if (this.files[0]) {
+                fileLabel.innerHTML = `<strong>Selected:</strong> ${this.files[0].name}`;
+                fileLabel.style.color = "#0070C0";
+            }
+        });
+
+        // 2. Upload Logic (Operation Data)
+        async function uploadOperationData() {
+            if (fileInput.files.length === 0) {
+                alert("Please select a file first.");
+                return;
+            }
+
+            const btn = document.getElementById('uploadBtn');
+            const statusArea = document.getElementById('statusArea');
+            const statusText = document.getElementById('statusText');
+
+            // UI Loading State
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+            statusArea.style.display = "flex";
+            statusText.textContent = "Cleaning data and updating database...";
+            statusText.className = "";
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                const response = await fetch('/api/operation/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    statusText.innerHTML = `<i class="fa-solid fa-check-circle"></i> ${result.message}`;
+                    statusText.className = "success-msg";
+                } else {
+                    throw new Error(result.message || "Unknown error occurred");
+                }
+            } catch (error) {
+                console.error('Upload Error:', error);
+                statusText.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Error: ${error.message}`;
+                statusText.className = "error-msg";
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-upload"></i> Process & Save to DB';
+            }
+        }
+
+        // 3. Download Logic (Dynamic Selection)
+        function downloadSelectedTable() {
+            const tableType = document.getElementById('tableSelect').value;
+
+            // Construct the API URL based on selection
+            // Requires your backend to have endpoints like /api/{type}/download
+            const url = `/api/${tableType}/download`;
+
+            // Trigger download in new tab
+            window.open(url, '_blank');
+        }
+    </script>
+</body>
+
+</html>

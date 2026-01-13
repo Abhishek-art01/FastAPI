@@ -120,7 +120,7 @@ class UserAdmin(ModelView, model=User):
 
 class TripDataAdmin(ModelView, model=TripData):
     # Updated to match your models.py columns exactly
-    column_list = [TripData.date, TripData.trip_id, TripData.employee_name, TripData.cab_registration_no, TripData.trip_direction]
+    column_list = [TripData.shift_date, TripData.trip_id, TripData.employee_name, TripData.cab_reg_no, TripData.trip_direction]
 
 # Simple views for the cleaned data tables
 class ClientDataAdmin(ModelView, model=ClientData): column_list = [ClientData.id, ClientData.trip_id, ClientData.employee_name]
@@ -315,7 +315,7 @@ async def get_gps_data(
         try:
             parts = date.split("-")
             formatted_date = f"{parts[2]}-{parts[1]}-{parts[0]}" if len(parts[0]) == 4 else date
-            query = query.where(TripData.date == formatted_date)
+            query = query.where(TripData.shift_date == formatted_date)
         except:
             pass 
 
@@ -347,3 +347,51 @@ async def update_gps_data(data: GPSUpdateModel, session: Session = Depends(get_s
     session.add(trip)
     session.commit()
     return {"status": "success"}
+# ==========================================
+# 4. UNIVERSAL DOWNLOAD ENDPOINTS
+# ==========================================
+
+
+
+@app.get("/api/{table_type}/download")
+def download_specific_table(table_type: str, session: Session = Depends(get_session)):
+    """
+    Dynamic endpoint to download any table based on selection.
+    """
+    
+    # 1. Determine Model based on URL parameter
+    model_map = {
+        "operation": OperationData,
+        "client": ClientData,
+        "raw": RawTripData,
+        "trip_data": TripData
+    }
+    
+    if table_type not in model_map:
+        return {"status": "error", "message": "Invalid table type selected."}
+    
+    model_class = model_map[table_type]
+    
+    # 2. Query Database
+    statement = select(model_class)
+    results = session.exec(statement).all()
+    
+    if not results:
+        return {"status": "error", "message": f"No data found in {table_type} table."}
+    
+    # 3. Convert to DataFrame
+    data = [row.model_dump() for row in results]
+    df = pd.DataFrame(data)
+    
+    # 4. Generate Excel
+    # We use a generic name, or you can customize based on table_type
+    filename = f"{table_type.capitalize()}_Export"
+    _, excel_buffer, filename_ext = create_styled_excel(df, filename)
+    
+    # 5. Return File
+    headers = {'Content-Disposition': f'attachment; filename="{filename_ext}"'}
+    return StreamingResponse(
+        excel_buffer, 
+        headers=headers, 
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
