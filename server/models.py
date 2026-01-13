@@ -10,24 +10,51 @@ class User(SQLModel, table=True):
 # --- 2. GPS CORNER DATA (Existing) ---
 class TripData(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    unique_id: str = Field(index=True, unique=True) 
+    
+    # Composite Key (Trip ID + Employee ID)
+    unique_id: str = Field(index=True, unique=True)
 
-    date: Optional[str] = None
+    # --- MANDATORY COLUMNS (Matches FINAL_DB_MAP) ---
+    shift_date: Optional[str] = None
     trip_id: Optional[str] = None
-    flight_number: Optional[str] = None
     employee_id: Optional[str] = None
-    team_type: Optional[str] = None
     gender: Optional[str] = None
+    emp_category: Optional[str] = None
     employee_name: Optional[str] = None
-    address: Optional[str] = None
-    landmark: Optional[str] = None
-    locality: Optional[str] = None
-    cab_registration_no: Optional[str] = None
-    cab_last_digit: Optional[str] = None
-    cab_type: Optional[str] = None
-    trip_direction: Optional[str] = None
     shift_time: Optional[str] = None
+    pickup_time: Optional[str] = None
+    drop_time: Optional[str] = None
+    trip_direction: Optional[str] = None
+    cab_reg_no: Optional[str] = None
+    cab_type: Optional[str] = None
+    vendor: Optional[str] = None
+    office: Optional[str] = None
+    airport_name: Optional[str] = None
+    landmark: Optional[str] = None
+    address: Optional[str] = None
+    flight_number: Optional[str] = None
+    flight_category: Optional[str] = None
+    flight_route: Optional[str] = None
+    flight_type: Optional[str] = None
+    trip_date: Optional[str] = None
+    mis_remark: Optional[str] = None
+    in_app_extra: Optional[str] = None
+    
+    # Special columns you requested
+    una: Optional[str] = None
+    unique_id: Optional[str] = None
+    
+    route_status: Optional[str] = None
+    clubbing_status: Optional[str] = None
+    journey_start_location: Optional[str] = None
+    journey_end_location: Optional[str] = None
+    gps_time: Optional[str] = None
+    gps_remark: Optional[str] = None
+
+    claim_status: Optional[str] = None
     marshall: Optional[str] = None
+    staff_count: Optional[int] = None
+    billable_count: Optional[int] = None
     one_side: Optional[float] = None
     two_side: Optional[float] = None
     club_km: Optional[float] = None
@@ -35,20 +62,8 @@ class TripData(SQLModel, table=True):
     b2b_deducted: Optional[float] = None
     total_km_pass: Optional[float] = None
     dd: Optional[str] = None
-    billable_count: Optional[int] = None
-    vendor: Optional[str] = None
-    reporting_at: Optional[str] = None
-    staff_count: Optional[int] = None
-    mis_remarks: Optional[str] = None
-    bb: Optional[str] = None
-    route_status: Optional[str] = None
-    clubbing_status: Optional[str] = None
-    journey_start_location: Optional[str] = None
-    gps_time_home: Optional[str] = None
-    gps_time_parking_departure: Optional[str] = None
-    journey_end_location: Optional[str] = None
-    gps_remark: Optional[str] = None
-    claim_status: Optional[str] = None
+    
+
 
 # --- 3. CLEANER: CLIENT DATA ---
 class ClientData(SQLModel, table=True):
