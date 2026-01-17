@@ -4,347 +4,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPS Corner | AI Tools</title>
-    <link rel="stylesheet" href="/gps-static/gps_corner.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>GPS Manager Dashboard</title>
+
+    <link rel="stylesheet" href="/gps-corner-static/gps_corner.css">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+
+
 
 <body>
 
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <i class="fa-solid fa-location-crosshairs logo-icon"></i>
-            <h2>GPS Corner</h2>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="/" class="nav-link"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
-            <a href="/cleaner" class="nav-link"><i class="fa-solid fa-file-excel"></i> Data Cleaner</a>
-            <a href="/gps-corner" class="nav-link active"><i class="fa-solid fa-map-location-dot"></i> GPS Tracking</a>
-            <a href="/admin" class="nav-link"><i class="fa-solid fa-shield-halved"></i> Admin Panel</a>
-        </nav>
-        <div class="sidebar-footer">
-            <a href="/logout" class="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
-        </div>
-    </aside>
+    <div class="dashboard-container">
 
-    <main class="main-content">
-        <header class="top-bar">
-            <h1>GPS Data Entry</h1>
-            <div class="user-info">User: <strong>{{ user }}</strong></div>
+        <header class="filter-bar">
+            <div class="filter-title">
+                <h2>GPS Corner</h2>
+                <span id="resultCount">Loading system...</span>
+            </div>
+            <div class="filter-inputs">
+                <input type="date" id="filterDate" class="inp">
+                <input type="text" id="filterCab" placeholder="Search Cab No..." class="inp">
+                <input type="text" id="filterDirection" placeholder="Search Direction..." class="inp">
+                <button class="btn-search" onclick="fetchTrips()">
+                    <i class="fa-solid fa-magnifying-glass"></i> Search
+                </button>
+            </div>
         </header>
 
-        <section class="filter-section">
-            <div class="filter-group">
-                <label>Date</label>
-                <input type="date" id="filterDate">
-            </div>
-            <div class="filter-group">
-                <label>Trip Direction</label>
-                <select id="filterDirection">
-                    <option value="">All</option>
-                    <option value="PICKUP">Pickup</option>
-                    <option value="DROP">Drop</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label>Cab/Vehicle No</label>
-                <input type="text" id="filterCab" placeholder="Search Cab No...">
-            </div>
-            <div class="filter-group">
-                <label>Clubbing Missing</label>
-                <select id="filterClubbing">
-                    <option value="">All</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                </select>
-            </div>
-            <button class="btn-search" onclick="loadData()"><i class="fa-solid fa-search"></i> Search</button>
-        </section>
+        <main id="tripsContainer" class="cards-wrapper">
+        </main>
 
-        <div class="table-container">
-            <table id="gpsTable">
-                <thead>
-                    <tr>
-                        <th>Trip ID</th>
-                        <th>Emp ID</th>
-                        <th>Name</th>
-                        <th>Address</th>
-                        <th>Locality</th>
-                        <th>Shift</th>
-                        <th>Vehicle</th>
-                        <th>Direction</th>
-                        <th>Reporting</th>
-                        <th>Count</th>
-                        <th>Route Miss</th>
-                        <th>Club Miss</th>
-                        <th>MIS Remark</th>
+    </div>
 
-                        <th class="edit-col">Arrival Time</th>
-                        <th class="edit-col">Departure/Parking</th>
-                        <th class="edit-col">Leave Time</th>
-                        <th class="edit-col">GPS Remarks</th>
-                        <th class="edit-col">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="tableBody">
-                </tbody>
-            </table>
-        </div>
-        <div class="pagination-controls">
-            <button id="btnPrev" class="btn-page" onclick="changePage(-1)" disabled>
-                <i class="fa-solid fa-chevron-left"></i> Previous
-            </button>
-            <span id="pageIndicator">Page 1</span>
-            <button id="btnNext" class="btn-page" onclick="changePage(1)">
-                Next <i class="fa-solid fa-chevron-right"></i>
-            </button>
-        </div>
-    </main>
+    <div id="toast">Data Saved Successfully!</div>
 
     <script>
-        // --- 1. CONFIGURATION ---
-        const API_URL = "/api/gps-data";
-        const UPDATE_URL = "/api/gps-update";
+        // --- CONFIGURATION ---
+        const API_BASE_URL = "/api"; // Use relative path since frontend/backend are same origin
 
-        // --- 2. LOAD DATA ---
-        async function loadData() {
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchTrips();
+        });
+
+        // --- FETCH DATA ---
+        async function fetchTrips() {
             const date = document.getElementById('filterDate').value;
-            const direction = document.getElementById('filterDirection').value;
             const cab = document.getElementById('filterCab').value;
-            const clubbing = document.getElementById('filterClubbing').value;
+            const container = document.getElementById('tripsContainer');
+            const countLabel = document.getElementById('resultCount');
 
-            // Build Query String
-            const params = new URLSearchParams({ date, direction, cab, clubbing });
+            container.innerHTML = '<p style="grid-column: 1/-1; text-align:center; color:#666;">Searching records...</p>';
 
             try {
-                const res = await fetch(`${API_URL}?${params}`);
-                const data = await res.json();
-                renderTable(data);
-            } catch (err) {
-                console.error("Error loading data:", err);
-                alert("Failed to load data");
+                let url = `${API_BASE_URL}/gps_trips?`;
+                if (date) url += `date=${date}&`;
+                if (cab) url += `vehicle=${cab}`;
+
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Network response was not ok");
+
+                const trips = await response.json();
+
+                countLabel.innerText = `Found ${trips.length} active trips`;
+                renderTrips(trips);
+
+            } catch (error) {
+                console.error("Error:", error);
+                container.innerHTML = `<p style="grid-column: 1/-1; text-align:center; color:red;">Error connecting to server.</p>`;
             }
         }
 
-        // --- 3. RENDER TABLE ---
-        function renderTable(data) {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = "";
+        // --- RENDER CARDS ---
+        function renderTrips(trips) {
+            const container = document.getElementById('tripsContainer');
+            container.innerHTML = '';
 
-            data.forEach(row => {
-                const tr = document.createElement('tr');
-                tr.dataset.id = row.id; // Store DB ID on the row
-
-                // --- READ ONLY COLUMNS ---
-                tr.innerHTML = `
-                    <td>${row.trip_id || ''}</td>
-                    <td>${row.employee_id || ''}</td>
-                    <td>${row.employee_name || ''}</td>
-                    <td class="truncate" title="${row.address}">${row.address || ''}</td>
-                    <td>${row.locality || ''}</td>
-                    <td>${row.shift_time || ''}</td>
-                    <td>${row.vehicle_no || ''}</td>
-                    <td>${row.trip_direction || ''}</td>
-                    <td>${row.reporting_at || ''}</td>
-                    <td>${row.staff_count || ''}</td>
-                    <td>${row.route_missing || ''}</td>
-                    <td>${row.clubbing_missing || ''}</td>
-                    <td class="truncate" title="${row.mis_remarks}">${row.mis_remarks || ''}</td>
-                `;
-
-                // --- EDITABLE COLUMNS ---
-
-                // 1. ARRIVAL TIME (Hybrid Dropdown)
-                const arrivalCell = document.createElement('td');
-                arrivalCell.innerHTML = `
-                    <select class="status-select" onchange="handleArrivalChange(this)">
-                        <option value="TIME" ${isTime(row.arrival_time) ? 'selected' : ''}>Enter Time</option>
-                        <option value="CAB NOT REPORTED ON EMPLOYEE LOCATION" ${row.arrival_time === "CAB NOT REPORTED ON EMPLOYEE LOCATION" ? 'selected' : ''}>CAB NOT REPORTED...</option>
-                    </select>
-                    <input type="time" class="time-input arrival-input" value="${isTime(row.arrival_time) ? row.arrival_time : ''}" 
-                           style="display: ${isTime(row.arrival_time) ? 'block' : 'none'};">
-                `;
-                tr.appendChild(arrivalCell);
-
-                // 2. DEPARTURE/PARKING (Hybrid)
-                const deptCell = document.createElement('td');
-                deptCell.innerHTML = `
-                    <select class="status-select dept-select" onchange="handleDeptChange(this)">
-                        <option value="TIME" ${isTime(row.departure_parking_time) ? 'selected' : ''}>Enter Time</option>
-                        <option value="CAB MOVE" ${row.departure_parking_time === "CAB MOVE" ? 'selected' : ''}>CAB MOVE</option>
-                    </select>
-                    <input type="time" class="time-input dept-input" value="${isTime(row.departure_parking_time) ? row.departure_parking_time : ''}"
-                           style="display: ${isTime(row.departure_parking_time) ? 'block' : 'none'};">
-                `;
-                tr.appendChild(deptCell);
-
-                // 3. LEAVE TIME (Conditional Mandatory)
-                const leaveCell = document.createElement('td');
-                const isCabMove = row.departure_parking_time === "CAB MOVE";
-                leaveCell.innerHTML = `
-                    <input type="time" class="time-input leave-input" value="${row.leave_time || ''}" 
-                           ${isCabMove ? '' : 'disabled'} 
-                           onchange="calculateParking(this)">
-                `;
-                tr.appendChild(leaveCell);
-
-                // 4. GPS REMARKS (Automated)
-                const remarksCell = document.createElement('td');
-                remarksCell.innerHTML = `
-                    <select class="status-select remarks-select" onchange="updateRemarkText(this)">
-                        <option value="">Select Status</option>
-                        <option value="CAB BOARDED">CAB BOARDED</option>
-                        <option value="CAB REPORTED ON EMPLOYEE LOCATION WITHOUT DROP">CAB REPORTED (NO DROP)</option>
-                    </select>
-                    <input type="text" class="remark-text" value="${row.gps_remarks || ''}" readonly>
-                `;
-                tr.appendChild(remarksCell);
-
-                // 5. SAVE BUTTON
-                const actionCell = document.createElement('td');
-                actionCell.innerHTML = `<button class="btn-save" onclick="saveRow(this)"><i class="fa-solid fa-floppy-disk"></i></button>`;
-                tr.appendChild(actionCell);
-
-                tbody.appendChild(tr);
-            });
-        }
-
-        // --- 4. LOGIC HANDLERS ---
-
-        function isTime(val) {
-            // Checks if value looks like HH:MM
-            return val && val.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/);
-        }
-
-        function handleArrivalChange(select) {
-            const input = select.nextElementSibling; // The time input
-            if (select.value === "TIME") {
-                input.style.display = "block";
-                input.focus();
-            } else {
-                input.style.display = "none";
-                input.value = ""; // Clear time if specific string selected
-            }
-            // Recalculate parking if needed
-            const row = select.closest('tr');
-            calculateParking(row.querySelector('.leave-input'));
-        }
-
-        function handleDeptChange(select) {
-            const row = select.closest('tr');
-            const timeInput = select.nextElementSibling;
-            const leaveInput = row.querySelector('.leave-input');
-
-            if (select.value === "TIME") {
-                timeInput.style.display = "block";
-                leaveInput.disabled = true; // Disable leave time
-                leaveInput.value = "";
-                leaveInput.classList.remove('mandatory');
-            } else if (select.value === "CAB MOVE") {
-                timeInput.style.display = "none";
-                timeInput.value = "";
-                leaveInput.disabled = false; // Enable leave time
-                leaveInput.classList.add('mandatory'); // Visual cue
-            }
-        }
-
-        function calculateParking(inputElement) {
-            const row = inputElement.closest('tr');
-            const arrivalSelect = row.querySelector('td:nth-child(14) select');
-            const arrivalInput = row.querySelector('td:nth-child(14) input');
-            const leaveInput = row.querySelector('.leave-input');
-            const remarkText = row.querySelector('.remark-text');
-            const remarkSelect = row.querySelector('.remarks-select');
-
-            // Logic: Only calculate if "CAB BOARDED" is selected OR implied
-            if (remarkSelect.value === "CAB BOARDED") {
-                const arrTime = arrivalSelect.value === "TIME" ? arrivalInput.value : null;
-                const lveTime = leaveInput.value;
-
-                if (arrTime && lveTime) {
-                    const diff = getTimeDifference(arrTime, lveTime);
-                    remarkText.value = `PARKING TIME -: ${diff}`;
-                }
-            }
-        }
-
-        function updateRemarkText(select) {
-            const row = select.closest('tr');
-            const input = row.querySelector('.remark-text');
-
-            if (select.value === "CAB BOARDED") {
-                // Trigger calculation
-                calculateParking(row.querySelector('.leave-input'));
-            } else {
-                input.value = select.value; // Just set the text directly for other options
-            }
-        }
-
-        function getTimeDifference(start, end) {
-            const [startH, startM] = start.split(':').map(Number);
-            const [endH, endM] = end.split(':').map(Number);
-
-            let diffM = (endH * 60 + endM) - (startH * 60 + startM);
-            if (diffM < 0) diffM += 24 * 60; // Handle overnight
-
-            const hours = Math.floor(diffM / 60);
-            const mins = diffM % 60;
-            return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-        }
-
-        async function saveRow(btn) {
-            const row = btn.closest('tr');
-            const id = row.dataset.id;
-
-            // Gather Data
-            const arrivalSelect = row.querySelector('td:nth-child(14) select');
-            const arrivalInput = row.querySelector('td:nth-child(14) input');
-            let arrivalVal = arrivalSelect.value === "TIME" ? arrivalInput.value : arrivalSelect.value;
-
-            const deptSelect = row.querySelector('td:nth-child(15) select');
-            const deptInput = row.querySelector('td:nth-child(15) input');
-            let deptVal = deptSelect.value === "TIME" ? deptInput.value : deptSelect.value;
-
-            const leaveVal = row.querySelector('.leave-input').value;
-            const remarksVal = row.querySelector('.remark-text').value;
-
-            // Validation for Mandatory Leave Time
-            if (deptVal === "CAB MOVE" && !leaveVal) {
-                alert("⚠️ Leave Time is MANDATORY when 'Cab Move' is selected!");
+            if (trips.length === 0) {
+                container.innerHTML = '<p style="grid-column: 1/-1; text-align:center; padding: 40px; color:#888;">No "Not Pay" trips found.</p>';
                 return;
             }
 
-            // Send to Server
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            trips.forEach(trip => {
+                const card = document.createElement('div');
+                card.className = 'trip-card';
+
+                // Handling nulls gracefully
+                const startLoc = trip.journey_start_location || '';
+                const endLoc = trip.journey_end_location || '';
+                const remark = trip.gps_remark || '';
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div class="header-left">
+                            <span class="trip-id">Trip ID: ${trip.trip_id}</span>
+                            <span class="trip-date"><i class="fa-regular fa-calendar"></i> ${trip.shift_date || ''}</span>
+                            <span class="trip-cab"><i class="fa-solid fa-taxi"></i> ${trip.cab_reg_no || ''}</span>
+                        </div>
+                        <div class="header-right">
+                             <span class="badge badge-red">ROUTE: ${trip.clubbing_status || 'NOT PAY'}</span>
+                             <span class="badge badge-blue">PICKUP</span>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="emp-table-wrapper">
+                            <table class="emp-table">
+                                <thead>
+                                    <tr>
+                                        <th>EMP ID</th>
+                                        <th>NAME</th>
+                                        <th>ADDRESS</th>
+                                        <th>LANDMARK</th>
+                                        <th>STATUS</th>
+                                        <th>CLUBBING</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>${trip.employee_id}</td>
+                                        <td><strong>${trip.employee_name}</strong></td>
+                                        <td class="addr-cell">${trip.address}</td>
+                                        <td>${trip.landmark || ''}</td>
+                                        <td>Not Pay</td>
+                                        <td><span class="badge badge-red-light">${trip.clubbing_status}</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card-footer-yellow">
+                        <div class="form-group">
+                            <label>JOURNEY START</label>
+                            <select id="start-${trip.trip_id}" class="form-input">
+                                <option value="">-- Select --</option>
+                                <option value="Office" ${startLoc === 'Office' ? 'selected' : ''}>Office</option>
+                                <option value="Home" ${startLoc === 'Home' ? 'selected' : ''}>Home</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>GPS TIME</label>
+                            <input type="text" class="form-input" value="12:30-14:30" readonly>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>JOURNEY END</label>
+                            <select id="end-${trip.trip_id}" class="form-input">
+                                <option value="">-- Select --</option>
+                                <option value="Office" ${endLoc === 'Office' ? 'selected' : ''}>Office</option>
+                                <option value="Home" ${endLoc === 'Home' ? 'selected' : ''}>Home</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group wide">
+                            <label>GPS REMARK</label>
+                            <input type="text" id="remark-${trip.trip_id}" class="form-input" placeholder="Remark..." value="${remark}">
+                        </div>
+
+                        <button class="btn-save" onclick="saveTrip(${trip.trip_id})">
+                            <i class="fa-solid fa-floppy-disk"></i> Save
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // --- SAVE FUNCTION ---
+        async function saveTrip(tripId) {
+            const start = document.getElementById(`start-${tripId}`).value;
+            const end = document.getElementById(`end-${tripId}`).value;
+            const remark = document.getElementById(`remark-${tripId}`).value;
+
             try {
-                const res = await fetch(UPDATE_URL, {
+                const response = await fetch(`${API_BASE_URL}/update_gps/${tripId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        id: id,
-                        arrival_time: arrivalVal,
-                        departure_parking_time: deptVal,
-                        leave_time: leaveVal,
-                        gps_remarks: remarksVal
+                        journey_start: start,
+                        journey_end: end,
+                        gps_remark: remark
                     })
                 });
 
-                if (res.ok) {
-                    btn.innerHTML = '<i class="fa-solid fa-check" style="color: lightgreen;"></i>';
-                    setTimeout(() => btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i>', 2000);
+                if (response.ok) {
+                    showToast("Trip Saved Successfully!");
                 } else {
-                    alert("Error saving data");
-                    btn.innerHTML = '<i class="fa-solid fa-xmark" style="color: red;"></i>';
+                    showToast("Error saving trip.");
                 }
-            } catch (e) {
-                console.error(e);
-                alert("Network Error");
+            } catch (error) {
+                console.error("Save Error:", error);
+                showToast("Connection Error");
             }
         }
 
-        // Initial Load (Optional)
-        // loadData(); 
+        function showToast(message) {
+            const x = document.getElementById("toast");
+            x.innerText = message;
+            x.className = "show";
+            setTimeout(function () { x.className = x.className.replace("show", ""); }, 3000);
+        }
     </script>
+
 </body>
 
 </html>

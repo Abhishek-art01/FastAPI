@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Management Center</title>
-    <link rel="stylesheet" href="operation_manager.css">
+
+    <link rel="stylesheet" href="/operation-manager-static/operation_manager.css">
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
@@ -99,7 +101,7 @@
             }
         });
 
-        // 2. Upload Logic (Operation Data)
+        // 2. Upload Logic
         async function uploadOperationData() {
             if (fileInput.files.length === 0) {
                 alert("Please select a file first.");
@@ -144,15 +146,11 @@
             }
         }
 
-        // 3. Download Logic (Dynamic Selection)
+        // 3. Download Logic
         function downloadSelectedTable() {
             const tableType = document.getElementById('tableSelect').value;
-
-            // Construct the API URL based on selection
-            // Requires your backend to have endpoints like /api/{type}/download
-            const url = `/api/${tableType}/download`;
-
             // Trigger download in new tab
+            const url = `/api/${tableType}/download`;
             window.open(url, '_blank');
         }
     </script>
