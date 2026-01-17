@@ -424,3 +424,20 @@ def process_operation_data(file_list_bytes):
     # Standardize (Matches OperationData Model)
     df_db = standardize_dataframe(df_db)
     return df_db, output, "Operation_Cleaned.xlsx"
+# ==========================================
+# 4. Fastag Data Cleaner
+# ==========================================
+def process_fastag_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Process Fastag data to match the FastagData model.
+    """
+    # Standardize column names to match model
+    df = df.rename(columns={
+        'fastag_id': 'fastag_id',
+        'vehicle_number': 'vehicle_number',
+        'time': 'time',
+       
+    })
+
+
+

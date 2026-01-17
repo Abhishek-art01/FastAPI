@@ -142,10 +142,12 @@
             pendingContainer.innerHTML = '<p style="color:#666;">Loading...</p>';
             
             try {
+                // Build URL with Parameters
                 let url = `${API_BASE_URL}/gps_trips?`;
                 if (date) url += `date=${date}&`;
-                if (cab) url += `vehicle=${cab}`;
-                if (direction) url += `trip_direction=${direction}`;
+                if (cab) url += `vehicle=${cab}&`;
+                if (direction) url += `trip_direction=${direction}&`;
+                if (status) url += `trip_id=${status}`;
 
                 const response = await fetch(url);
                 if (!response.ok) throw new Error("Network response was not ok");
