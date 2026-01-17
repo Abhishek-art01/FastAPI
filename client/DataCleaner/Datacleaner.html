@@ -10,19 +10,28 @@
 </head>
 
 <body>
-
     <div class="container">
         <div class="card">
             <div class="header">
                 <i class="fa-solid fa-plane-departure logo-icon"></i>
-                <h1>TripSheet Cleaner</h1>
-                <p>Upload raw Excel to generate Billing & Ops reports.</p>
+                <h1>Data Cleaner Hub</h1>
+                <p>Select data type and upload files.</p>
+            </div>
+
+            <div style="margin-top: 20px; text-align: left;">
+                <label style="font-weight: 600; color: #374151; font-size: 0.9rem;">Select Data Type:</label>
+                <select id="cleanerType"
+                    style="width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #d1d5db;">
+                    <option value="client">Client Data (App)</option>
+                    <option value="raw">Raw Data (App)</option>
+                    <option value="operation">Operation Data (Multiple .xls)</option>
+                </select>
             </div>
 
             <div class="upload-area" id="drop-zone">
-                <input type="file" id="fileInput" accept=".xlsx, .xls" hidden>
+                <input type="file" id="fileInput" accept=".xlsx, .xls" multiple hidden>
                 <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
-                <p>Drag & Drop Excel file</p>
+                <p>Drag & Drop file(s)</p>
                 <button class="btn-select" onclick="document.getElementById('fileInput').click()">Browse Files</button>
                 <p class="file-name" id="fileName"></p>
             </div>
@@ -35,11 +44,8 @@
                 <p class="success-text"><i class="fa-solid fa-check-circle"></i> Processing Complete!</p>
 
                 <div class="button-group">
-                    <a id="btnBilling" class="btn-download blue" href="#" target="_blank">
-                        <i class="fa-solid fa-file-invoice-dollar"></i> Billing File
-                    </a>
-                    <a id="btnOps" class="btn-download green" href="#" target="_blank">
-                        <i class="fa-solid fa-bus"></i> Ops File
+                    <a id="btnDownload" class="btn-download blue" href="#" target="_blank">
+                        <i class="fa-solid fa-download"></i> Download Cleaned File
                     </a>
                 </div>
 
@@ -56,28 +62,37 @@
         const fileNameDisplay = document.getElementById('fileName');
         const statusDiv = document.getElementById('status');
         const downloadSection = document.getElementById('downloadSection');
-        const btnBilling = document.getElementById('btnBilling');
-        const btnOps = document.getElementById('btnOps');
+        const btnDownload = document.getElementById('btnDownload');
+        const cleanerType = document.getElementById('cleanerType');
 
-        // File Selection Logic
+        // 1. File Selection Logic
         fileInput.addEventListener('change', () => {
             if (fileInput.files.length > 0) {
-                fileNameDisplay.textContent = fileInput.files[0].name;
+                if (fileInput.files.length === 1) {
+                    fileNameDisplay.textContent = fileInput.files[0].name;
+                } else {
+                    fileNameDisplay.textContent = `${fileInput.files.length} files selected`;
+                }
                 processBtn.disabled = false;
                 processBtn.classList.add('active');
-                downloadSection.style.display = 'none'; // Hide results if new file selected
+                downloadSection.style.display = 'none'; // Hide old results
+                statusDiv.innerHTML = "";
             }
         });
 
-        // Upload Logic
+        // 2. Upload & Process Logic
         processBtn.addEventListener('click', async () => {
-            const file = fileInput.files[0];
-            if (!file) return;
+            if (fileInput.files.length === 0) return;
 
             const formData = new FormData();
-            formData.append('file', file);
+            // Append all files
+            for (let i = 0; i < fileInput.files.length; i++) {
+                formData.append('files', fileInput.files[i]);
+            }
+            // Append selected type
+            formData.append('cleanerType', cleanerType.value);
 
-            // UI Loading State
+            // UI Loading
             processBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
             processBtn.disabled = true;
             statusDiv.textContent = "";
@@ -89,27 +104,37 @@
                 });
 
                 if (response.ok) {
-                    const data = await response.json(); // Get JSON response
+                    const data = await response.json();
 
-                    // Setup Download Links
-                    btnBilling.href = `/download/${data.billing_file}`;
-                    btnOps.href = `/download/${data.ops_file}`;
+                    // Setup Download Link
+                    btnDownload.href = `/download/${data.file_url}`;
 
-                    // Show Download Buttons
+                    // Show Success UI
                     downloadSection.style.display = 'block';
-                    processBtn.style.display = 'none'; // Hide process button
+                    processBtn.style.display = 'none';
+                    statusDiv.innerHTML = `<span style="color: #10b981;">Processing Complete. Rows: ${data.rows_processed}</span>`;
 
                 } else {
-                    statusDiv.innerHTML = '<span style="color: #ef4444;">Error processing file.</span>';
+                    const err = await response.text();
+                    statusDiv.innerHTML = `<span style="color: #ef4444;">Error: ${err}</span>`;
                     processBtn.innerHTML = '<i class="fa-solid fa-gears"></i> Retry';
                     processBtn.disabled = false;
                 }
             } catch (error) {
                 console.error(error);
-                statusDiv.innerHTML = '<span style="color: #ef4444;">Server connection failed.</span>';
+                statusDiv.innerHTML = '<span style="color: #ef4444;">Connection failed. Check server.</span>';
                 processBtn.disabled = false;
             }
         });
+
+        // 3. AUTO-REFRESH AFTER DOWNLOAD (The Fix)
+        btnDownload.addEventListener('click', () => {
+            // Wait 1.5 seconds for the download to start, then refresh the page
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        });
+
     </script>
 </body>
 
