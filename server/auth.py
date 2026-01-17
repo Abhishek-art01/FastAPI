@@ -1,10 +1,7 @@
 import bcrypt
 
 def get_password_hash(password: str) -> str:
-    """
-    Hashes a password using bcrypt.
-    Handles the conversion between strings (FastAPI) and bytes (bcrypt).
-    """
+  
     # 1. Convert string to bytes
     pwd_bytes = password.encode('utf-8')
     
@@ -16,9 +13,7 @@ def get_password_hash(password: str) -> str:
     return hashed_bytes.decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verifies a password against the stored hash.
-    """
+    
     # 1. Convert inputs to bytes
     pwd_bytes = plain_password.encode('utf-8')
     hash_bytes = hashed_password.encode('utf-8')

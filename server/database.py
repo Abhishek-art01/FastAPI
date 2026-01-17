@@ -8,7 +8,7 @@ from sqlmodel import SQLModel, create_engine, Session
 
 # --- 1. SETUP DATABASE URL ---
 
-# Check if we are on Render (Render automatically sets 'DATABASE_URL')
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # If NOT on Render, try to load from local secrets.json

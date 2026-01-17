@@ -18,15 +18,6 @@ from pydantic import BaseModel
 from sqlmodel import select, Session, desc, col, update, SQLModel
 from sqladmin import Admin, ModelView
 from sqladmin.authentication import AuthenticationBackend
-from pathlib import Path
-from contextlib import asynccontextmanager
-import os
-from fastapi.middleware.cors import CORSMiddleware
-import io
-import zipfile
-from fastapi.responses import FileResponse 
-
-from pydantic import BaseModel
 
 # --- INTERNAL IMPORTS ---
 from .auth import verify_password, get_password_hash
@@ -43,7 +34,8 @@ DIRS = {
     "login": CLIENT_DIR / "LoginPage",
     "cleaner": CLIENT_DIR / "DataCleaner",
     "gps": CLIENT_DIR / "GPSCorner",
-    "operation-manager": CLIENT_DIR / "OperationManager"
+    "operation-manager": CLIENT_DIR / "OperationManager",
+    "sidebar": CLIENT_DIR / "Sidebar"
 }
 
 # --- 2. LIFESPAN (Startup) ---
@@ -57,27 +49,33 @@ app = FastAPI(lifespan=lifespan)
 # --- 3. MIDDLEWARE ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://localhost:5000",
+        "https://aitarowdatacleaner.onrender.com"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
 
 on_render = os.environ.get("RENDER") is not None
 app.add_middleware(
     SessionMiddleware,
     secret_key="super_secret_static_key",
+    # secret_key=os.environ["SESSION_SECRET"]
     max_age=3600, 
     https_only=on_render, 
     same_site="lax"
 )
 
 # --- 4. STATIC FILES & TEMPLATES ---
-app.mount("/static", StaticFiles(directory=DIRS["home"]), name="static")
+app.mount("/home-static", StaticFiles(directory=DIRS["home"]), name="home_static")
 app.mount("/login-static", StaticFiles(directory=DIRS["login"]), name="login_static")
 app.mount("/cleaner-static", StaticFiles(directory=DIRS["cleaner"]), name="cleaner_static")
 app.mount("/gps-corner-static", StaticFiles(directory=DIRS["gps"]), name="gps_static")
 app.mount("/operation-manager-static", StaticFiles(directory=DIRS["operation-manager"]), name="operation-manager_static")
+app.mount("/sidebar-static", StaticFiles(directory=DIRS["sidebar"]), name="sidebar_static")
 
 templates = {
     "home": Jinja2Templates(directory=DIRS["home"]),
@@ -85,6 +83,7 @@ templates = {
     "cleaner": Jinja2Templates(directory=DIRS["cleaner"]),
     "gps": Jinja2Templates(directory=DIRS["gps"]),
     "operation-manager": Jinja2Templates(directory=DIRS["operation-manager"]),
+    "sidebar": Jinja2Templates(directory=DIRS["sidebar"]),
 }
 
 # --- 5. AUTHENTICATION BACKEND ---
@@ -124,12 +123,10 @@ class UserAdmin(ModelView, model=User):
             model.password_hash = hashed
             data["password_hash"] = hashed
 
-class TripDataAdmin(ModelView, model=TripData):
-    column_list = [TripData.shift_date, TripData.trip_id, TripData.employee_name, TripData.cab_reg_no, TripData.trip_direction]
-
-class ClientDataAdmin(ModelView, model=ClientData): column_list = [ClientData.id, ClientData.trip_id, ClientData.employee_name]
-class RawTripDataAdmin(ModelView, model=RawTripData): column_list = [RawTripData.id, RawTripData.trip_id, RawTripData.trip_date]
-class OperationDataAdmin(ModelView, model=OperationData): column_list = [OperationData.id, OperationData.trip_id]
+class TripDataAdmin(ModelView, model=TripData): column_list = [TripData.shift_date, TripData.unique_id, TripData.employee_name, TripData.cab_reg_no, TripData.trip_direction]
+class ClientDataAdmin(ModelView, model=ClientData): column_list = [ClientData.id, ClientData.unique_id, ClientData.employee_name]
+class RawTripDataAdmin(ModelView, model=RawTripData): column_list = [RawTripData.id, RawTripData.unique_id, RawTripData.trip_date]
+class OperationDataAdmin(ModelView, model=OperationData): column_list = [OperationData.id, OperationData.unique_id]
 
 admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key="super_secret_static_key"))
 admin.add_view(UserAdmin)
@@ -252,6 +249,104 @@ async def clean_data(
         print(f"❌ Server Error: {e}")
         return Response(f"Internal Error: {e}", status_code=500)
 
+
+
+# ==========================================
+# 9. GPS CORNER API 
+# ==========================================
+
+# 1. THE GET ROUTE
+@app.get("/api/gps_trips", response_model=List[TripData])
+def read_gps_trips(
+    date: str = None, 
+    vehicle: str = None, 
+    trip_direction: str = None,
+    session: Session = Depends(get_session)
+):
+    # Base query
+    query = select(TripData)
+    
+    # FILTER 1: Exclude 'Pay' status
+    if hasattr(TripData, "clubbing_status"):
+        query = query.where(col(TripData.clubbing_status).ilike("%not pay%"))
+
+    # FILTER 2: Date 
+    if date:
+        try:
+            # Parse HTML 'YYYY-MM-DD' -> Convert to DB 'DD-MM-YYYY'
+            date_obj = datetime.strptime(date, "%Y-%m-%d")
+            formatted_date = date_obj.strftime("%d-%m-%Y")
+            
+            print(f"🔍 Searching for date: {formatted_date}") 
+            query = query.where(TripData.shift_date.contains(formatted_date))
+        except ValueError:
+            # Fallback for simple string match
+            query = query.where(TripData.shift_date.contains(date))
+
+    # FILTER 3: Vehicle
+    if vehicle:
+        query = query.where(TripData.cab_reg_no.contains(vehicle))
+
+    results = session.exec(query).all()
+    return results
+
+# 2. THE UPDATE ROUTE (Using Unique ID)
+# ---------------------------------------------------------
+# ROBUST UPDATE ROUTE (Fixes Key Mismatch & Scientific Notation)
+# ---------------------------------------------------------
+@app.post("/api/update_gps/{unique_id}")
+def update_gps_data(unique_id: str, payload: dict, session: Session = Depends(get_session)):
+    print(f"🔥 DEBUG: Request for Unique ID: {unique_id}")
+    print(f"📦 DEBUG: Data Received: {payload}")
+
+    # 1. Find the trip
+    # We strip whitespace just in case
+    clean_id = str(unique_id).strip()
+    statement = select(TripData).where(col(TripData.unique_id) == clean_id)
+    trip = session.exec(statement).first()
+    
+    if not trip:
+        print(f"❌ DEBUG: Unique ID '{clean_id}' not found.")
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    # 2. UPDATE FIELDS (Checking BOTH possible key names)
+    
+    # Start Location
+    if "journey_start_location" in payload:
+        trip.journey_start_location = payload["journey_start_location"]
+    elif "journey_start" in payload:
+        trip.journey_start_location = payload["journey_start"]
+    elif "start" in payload:
+        trip.journey_start_location = payload["start"]
+
+    # End Location
+    if "journey_end_location" in payload:
+        trip.journey_end_location = payload["journey_end_location"]
+    elif "journey_end" in payload:
+        trip.journey_end_location = payload["journey_end"]
+    elif "end" in payload:
+        trip.journey_end_location = payload["end"]
+
+    # Remarks
+    if "gps_remark" in payload:
+        trip.gps_remark = payload["gps_remark"]
+    elif "remark" in payload:
+        trip.gps_remark = payload["remark"]
+
+    # GPS Time
+    if "gps_time" in payload:
+        trip.gps_time = payload["gps_time"]
+
+    # 3. Save to DB
+    session.add(trip)
+    session.commit()
+    session.refresh(trip)
+    
+    print(f"✅ DEBUG: Saved to DB! Start={trip.journey_start_location}, End={trip.journey_end_location}")
+    return {"status": "success", "data": trip}
+# ==========================================
+# 4. UNIVERSAL DOWNLOAD ENDPOINTS
+# ==========================================
 @app.get("/download/{filename}")
 async def download_file(filename: str, request: Request):
     if not request.session.get("user"):
@@ -266,74 +361,6 @@ async def download_file(filename: str, request: Request):
         filename=filename, 
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-
-# ==========================================
-# 9. GPS CORNER API (Corrected)
-# ==========================================
-
-# 1. THE GET ROUTE (Matches what frontend fetch() expects)
-@app.get("/api/gps_trips", response_model=List[TripData])
-def read_gps_trips(
-    date: str = None, 
-    vehicle: str = None, 
-    session: Session = Depends(get_session)
-):
-    # Base query
-    query = select(TripData)
-    
-    # FILTER 1: Exclude 'Pay' status
-    if hasattr(TripData, "clubbing_status"):
-        query = query.where(col(TripData.clubbing_status).ilike("%not pay%"))
-
-    # FILTER 2: Date (Fixing the format mismatch)
-    if date:
-        # HTML sends 'YYYY-MM-DD' (e.g., 2026-01-01)
-        # We need to convert it to 'DD-MM-YYYY' (e.g., 01-01-2026) to match your DB string
-        try:
-            # Parse the YYYY-MM-DD string
-            date_obj = datetime.strptime(date, "%Y-%m-%d")
-            # Reformat to DD-MM-YYYY
-            formatted_date = date_obj.strftime("%d-%m-%Y")
-            
-            print(f"🔍 Searching for date: {formatted_date}") # Debug print
-            query = query.where(TripData.shift_date.contains(formatted_date))
-        except ValueError:
-            # If parsing fails, just try searching the raw string
-            query = query.where(TripData.shift_date.contains(date))
-
-    # FILTER 3: Vehicle
-    if vehicle:
-        query = query.where(TripData.cab_reg_no.contains(vehicle))
-
-    results = session.exec(query).all()
-    return results
-
-# 2. THE UPDATE ROUTE (For the Green Save Button)
-@app.post("/api/update_gps/{trip_id}")
-def update_gps_data(trip_id: int, payload: dict, session: Session = Depends(get_session)):
-    # Fetch the trip
-    trip = session.get(TripData, trip_id)
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
-    
-    # Update fields provided by the dashboard
-    if "journey_start" in payload:
-        trip.journey_start_location = payload["journey_start"]
-    if "journey_end" in payload:
-        trip.journey_end_location = payload["journey_end"]
-    if "gps_remark" in payload:
-        trip.gps_remark = payload["gps_remark"]
-    
-    # Save changes
-    session.add(trip)
-    session.commit()
-    session.refresh(trip)
-    
-    return {"status": "success", "data": trip}
-
-# ==========================================
-# 4. UNIVERSAL DOWNLOAD ENDPOINTS
-# ==========================================
 @app.get("/api/{table_type}/download")
 def download_specific_table(table_type: str, session: Session = Depends(get_session)):
     model_map = {

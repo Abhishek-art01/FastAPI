@@ -261,3 +261,131 @@ body {
         opacity: 0;
     }
 }
+/* --- Visual Separator --- */
+.section-divider {
+    border-top: 2px dashed #e0e0e0;
+    margin: 40px 0 20px 0;
+    position: relative;
+    text-align: center;
+}
+.section-title {
+    background: #f4f7fa; /* Match body bg */
+    padding: 0 15px;
+    position: relative;
+    top: -12px;
+    font-weight: 700;
+    color: #666;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.form-input:disabled {
+    background-color: #f5f5f5; /* Light gray */
+    color: #555;
+    border-color: #ddd;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+/* --- Edit Button (Orange/Yellow Theme) --- */
+.btn-edit {
+    background-color: #f57c00; /* Orange */
+    color: white;
+    border: none;
+    width: 36px; height: 36px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+}
+.btn-edit:hover { background-color: #ef6c00; }
+
+/* Hide Save button by default in the Updated section */
+.hidden { display: none !important; }
+/* --- New Section Divider --- */
+.section-divider {
+    border-top: 2px dashed #e0e0e0;
+    margin: 40px 0 20px 0;
+    position: relative;
+    text-align: center;
+}
+
+.section-title {
+    background: #f4f6f9; /* Matches your body bg */
+    padding: 0 15px;
+    position: relative;
+    top: -12px;
+    font-weight: 700;
+    color: #666;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* --- Read-Only Input Styling --- */
+.form-input:disabled {
+    background-color: #f0f0f0;
+    color: #555;
+    border-color: #ddd;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+/* --- Edit Button (Orange) --- */
+.btn-edit {
+    background-color: #f57c00; /* Orange */
+    color: white;
+    border: none;
+    width: 36px; height: 36px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    margin-bottom: 1px;
+}
+.btn-edit:hover { background-color: #ef6c00; }
+
+/* Helper to toggle buttons */
+.hidden { display: none !important; }
+
+/* Headers for the sections */
+.section-header { margin-bottom: 15px; color: #c62828; font-size: 1.2rem; display: flex; align-items: center; gap: 10px; }
+/* --- Badge Status Colors --- */
+
+/* Green Badge (For 'Pay') */
+.badge-green {
+    background-color: #e8f5e9;    /* Light Green Background */
+    color: #2e7d32;               /* Dark Green Text */
+    border: 1px solid #a5d6a7;    /* Green Border */
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* Red Badge (For 'Not Pay') - Ensuring it matches */
+.badge-red {
+    background-color: #ffebee;
+    color: #c62828;
+    border: 1px solid #ef9a9a;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* Blue Badge (For 'Pickup' / 'Drop') */
+.badge-blue {
+    background-color: #e3f2fd;    /* Light Blue Background */
+    color: #1565c0;               /* Dark Blue Text */
+    border: 1px solid #90caf9;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-left: 5px;
+}
