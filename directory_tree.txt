@@ -33,10 +33,14 @@ FastAPI/
             refs/
                 heads/
                     main
+                    feature/
+                        operation_maneger
                 remotes/
                     origin/
                         HEAD
                         main
+                        feature/
+                            operation_maneger
         objects/
             00/
                 d2109e252e63e5aead0128ac0a355a648e3630
@@ -55,6 +59,8 @@ FastAPI/
                 cabaa796c26ebd22ea25e57b6c0904e0d26111
             0c/
                 d128649d02517deecc1e44728491709af64f44
+            0d/
+                b4447111d3a7a7064e8378aad6ef03c4ad9acb
             0e/
                 6085dbb098190ee05ab875cf9fb1dff9414cd6
             0f/
@@ -67,6 +73,7 @@ FastAPI/
             18/
                 5a033fced8e379f9aeb6d2474516992eb1be90
             1b/
+                36027bd167a7c5768ff843fc3b92e2d7a75f8f
                 57f50fcc3e7cf0df484e3d31e5a67c78cc55d9
             1d/
                 78dd745ae3c11213271b6115ff87b2b68d32b8
@@ -89,10 +96,14 @@ FastAPI/
                 b11c64769764194cc214b32443c9a6a0859d82
             2f/
                 0582bb8142c5b1b1e4ed3fa919a7a6d2dc1d73
+                0922b16ed3e371ee64c40ff6b8a66c190b044b
+            31/
+                bb335a079e8afbf29dafc3b214316d9309490c
             34/
                 245dffc32c56f448a29e3a8296aafeba712eb9
             35/
                 24d379af2f6b2a4b463ed96dd6d2a30072dbca
+                ef6a0923f86b60ebf0a4fe6295ee1876a8166c
             37/
                 a1fa6b44d160d125f4c647627692017720807e
             38/
@@ -110,6 +121,8 @@ FastAPI/
                 b848b860422e51fd5317878eaedcf16e8e94fb
             45/
                 e0a00e804ebc27db07cb834913ed8beffa0912
+            48/
+                fe72cdbf6974d7f8d171c2aee3f109855f0045
             4b/
                 f307d2cbc108f416553e085483c790b6d3a346
             4f/
@@ -118,6 +131,9 @@ FastAPI/
                 b510419de0153299295bd7216a1a5413004cb5
             53/
                 09fa6650a8e136ff87d6a614110d2ac789e0f3
+                7e05508354f503548cf1831848b2defb6bfe31
+            55/
+                dc000bbafacbfa2a8b59644cd0de55d63503d9
             56/
                 899e8660754063c1ca6ec52cf7a047cb5b45fa
             59/
@@ -129,6 +145,7 @@ FastAPI/
                 0ad3e644033b85c8c44a40e657d286a65b7f53
                 15b5fc428bd1449b1b35ef8a336ba0443f8f10
                 81877fd547b79e14c05fbd3a421626cad453ff
+                8a4c3dfc84dbddbd4c35a921da52b0a22d9559
             65/
                 fd36686fa49ebfd8bcaf79c8c89ed70f18f01d
             66/
@@ -145,6 +162,7 @@ FastAPI/
                 3d7bc153c255cbc884a16c94f8e6f68a91b429
                 5125d9781419b7fbb2ca82a51695dc9aa82621
             6e/
+                94d974daeb97752b2a406619188854e624ec04
                 95c1ed16a357e7bafc5afcb6e2d092da968ead
             70/
                 2216bbcef4095a7c2e14656d2510faaf43b10e
@@ -176,6 +194,7 @@ FastAPI/
             8f/
                 618e324dcb3af71c090451da9c0e28c9db119c
             91/
+                6e7a3a557f71c0598eec9ec5b87a0ed2edb0e5
                 84f6d9a8445cb60b88af45d9e52e2e1700725d
             93/
                 386b9a5df64c38006a52b3b8f1f9dd2eed1b53
@@ -188,6 +207,8 @@ FastAPI/
                 f4e986a8c81fc63f408c3fb7f2204b93ebab26
             9a/
                 7e70d4d19d1bdb4ad19d0c650c3ecf9b31cc7c
+            9c/
+                d55002102e65c18e3b8cc069390b8438e9a112
             9d/
                 92480141e61e77bb636d08bf45e6d814d4b58a
             a3/
@@ -195,6 +216,8 @@ FastAPI/
             a5/
                 39c7046414d32c0641f0f3f4b7ab30ec4b781f
                 93e992780cba0c4f73b8438ccfbe558c49cd8b
+            a6/
+                24e8787606eaf1c249ea5e14f9a54e5fdfaa22
             a8/
                 7ac7dac71397fd077852924a60dda6f7cdc001
             aa/
@@ -212,12 +235,17 @@ FastAPI/
                 1195f0772c6482836ae243ce3816030385fe4a
             b4/
                 ab87e0f977d675432f4b236c84775de157f457
+            b9/
+                d69969983eb038b2442c298ac1afdb0e90607d
             bc/
                 700c26ffb2f4140ac665e7693800df325e442f
             bd/
                 3b207589e0e2c3fc797a5200351f12bb583e9c
+                5d5e0d93778e53930bddf3d8b951d35ba157eb
             be/
                 8b5ec593fd530e134f1fe71053681fd4212680
+            c1/
+                026aa9c8aa2367a15f0644ed84d9d3b492ab8b
             c2/
                 bab0ce0678c67a44b1281663b4c1ab1f5f0c9c
             c4/
@@ -261,6 +289,7 @@ FastAPI/
                 36929e3b9341407bbb3be81c716b842728d11a
             f8/
                 2c0c363d356d61d9a11bd80dcec0f31d8d15d1
+                3ea92cb2a780bb0eae84e51945c943921a81df
                 61a66bebd4326576e266024b1ee8244efa9796
             f9/
                 ad638283c06a4f930a6235dff670e2c376bf8e
@@ -269,6 +298,7 @@ FastAPI/
                 65f073fa11b03af18084983511eaf148e17f07
             fe/
                 20930038956f0699e8d1709a9a3e9f51d03a38
+                910858a78566eeb9cf4bdc803175053b9ebf22
             info/
             pack/
                 pack-00f8ec43c42313c0db3a5b41dd5405596b0db07b.idx
@@ -277,10 +307,14 @@ FastAPI/
         refs/
             heads/
                 main
+                feature/
+                    operation_maneger
             remotes/
                 origin/
                     HEAD
                     main
+                    feature/
+                        operation_maneger
             tags/
     client/
         DataCleaner/
@@ -302,6 +336,10 @@ FastAPI/
         LoginPage/
             login.css
             login.html
+        OperationManager/
+            operation_manager.css
+            operation_manager.html
+            processed_db_mock.csv
     server/
         .python-version
         auth.py
@@ -3850,6 +3888,7 @@ FastAPI/
                                 __pycache__/
                                     console.cpython-311.pyc
                                     css.cpython-311.pyc
+                                    csvs.cpython-311.pyc
                                     excel.cpython-311.pyc
                                     format.cpython-311.pyc
                                     info.cpython-311.pyc

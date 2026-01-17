@@ -9,6 +9,7 @@ class User(SQLModel, table=True):
 
 # --- 2. GPS CORNER DATA (Existing) ---
 class TripData(SQLModel, table=True):
+    __tablename__ = "tripdata"
     id: Optional[int] = Field(default=None, primary_key=True)
     
     # Composite Key (Trip ID + Employee ID)
