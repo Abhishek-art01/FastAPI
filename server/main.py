@@ -31,7 +31,6 @@ from pydantic import BaseModel
 # --- INTERNAL IMPORTS ---
 from .auth import verify_password, get_password_hash
 from .database import create_db_and_tables, get_session, engine
-# Make sure TripData is the class defined in models.py matching your DB columns
 from .models import User, ClientData, RawTripData, OperationData, TripData 
 from .cleaner import process_client_data, process_raw_data, process_operation_data
 
