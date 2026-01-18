@@ -1,55 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard | Air India Tools</title>
-<link rel="stylesheet" href="home-static/homepage.css">
+    <title>Dashboard</title>
+    
+    <link rel="stylesheet" href="home-static/homepage.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="components-static/sidebar.css">
+    <script src="components-static/sidebar.js"></script> 
 </head>
 
 <body>
-
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <i class="fa-solid fa-plane-up logo-icon"></i>
-            <h2>AI Tools</h2>
-        </div>
-
-        <nav class="sidebar-nav">
-            <a href="/" class="nav-link active">
-                <i class="fa-solid fa-gauge-high"></i> Dashboard
-            </a>
-
-            <a href="/operation-manager" class="nav-link">
-                <i class="fa-solid fa-database"></i> Operation Manager
-            </a>
-
-            <a href="/cleaner" class="nav-link">
-                <i class="fa-solid fa-file-excel"></i> Data Cleaner
-            </a>
-
-            <a href="/gps-corner" class="nav-link">
-                <i class="fa-solid fa-map-location-dot"></i> GPS Corner
-            </a>
-
-            <a href="/admin" class="nav-link">
-                <i class="fa-solid fa-shield-halved"></i> Admin Panel
-            </a>
-        </nav>
-
-        <div class="sidebar-footer">
-            <a href="/logout" class="logout-btn">
-                <i class="fa-solid fa-right-from-bracket"></i> Logout
-            </a>
-        </div>
-    </aside>
-
     <main class="main-content">
         <header class="top-bar">
-            <h1>Dashboard</h1>
-
+            <h1 style="margin-left: 50px;">Dashboard</h1>
+            
             <div class="profile-section">
                 <span class="username">Hello, <strong>{{ user }}</strong></span>
                 <div class="avatar">
@@ -63,13 +30,8 @@
                 <h3>Welcome back! 👋</h3>
                 <p>Select a tool from the sidebar to get started.</p>
             </div>
-
-            <div class="stats-grid">
-
-            </div>
+            <div class="stats-grid"></div>
         </div>
     </main>
-
 </body>
-
 </html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Locality Manager</title>
+    
+    <link rel="stylesheet" href="/shared-static/sidebar.css">
+    <script src="/shared-static/sidebar.js"></script>
+
+    <link rel="stylesheet" href="/locality-static/Localitycorner.css">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+    <div class="main-content">
+        <header class="lm-header">
+            <div class="header-left">
+                <h1>🏙️ Locality Manager</h1>
+            </div>
+            <div class="metric-card">
+                <i class="fa-solid fa-triangle-exclamation icon-alert"></i>
+                <div>
+                    <span class="metric-label">Pending Addresses</span>
+                    <div class="metric-value" id="globalPendingCount">0</div>
+                </div>
+            </div>
+        </header>
+
+        <div class="action-bar">
+            <button class="btn-tab active" onclick="switchTab('view')">View All</button>
+            <button class="btn-tab" onclick="switchTab('set')">Set Locality (Auto)</button>
+            <button class="btn-tab" onclick="switchTab('add')">Add New Locality</button>
+        </div>
+
+        <div id="tab-view" class="tab-content active">
+            <div class="table-controls">
+                <input type="text" id="viewSearch" placeholder="Filter Address..." onkeydown="if(event.key==='Enter') fetchTableData(1)">
+                <button class="btn-icon" onclick="fetchTableData(1)"><i class="fa-solid fa-magnifying-glass"></i></button>
+            </div>
+            
+            <div class="table-wrapper">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Address</th>
+                            <th>Locality</th>
+                            <th>Zone</th>
+                            <th>KM</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="viewTableBody">
+                        </tbody>
+                </table>
+            </div>
+
+            <div class="pagination-controls">
+                <button id="btnPrev" onclick="changePage(-1)">⬅ Prev</button>
+                <span id="pageIndicator">Page 1</span>
+                <button id="btnNext" onclick="changePage(1)">Next ➡</button>
+            </div>
+        </div>
+
+        <div id="tab-set" class="tab-content">
+            <div class="sub-tabs">
+                <button class="btn-sub active" id="sub-single" onclick="setSetMode('single')">⚡ Single</button>
+                <button class="btn-sub" id="sub-bulk" onclick="setSetMode('bulk')">📦 Bulk</button>
+            </div>
+
+            <div id="mode-single" class="mode-content">
+                <div id="pendingCard" class="pending-card hidden">
+                    <label>Address:</label>
+                    <div class="highlight-box" id="pendingAddress">Loading...</div>
+                    
+                    <div class="form-group">
+                        <label>Select Locality</label>
+                        <select id="singleLocalitySelect" onchange="updatePreview()">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+
+                    <div class="info-row">
+                        <div>Zone: <strong id="previewZone">-</strong></div>
+                        <div>KM: <strong id="previewKM">-</strong></div>
+                    </div>
+
+                    <button class="btn-primary" onclick="saveSinglePending()">Save & Next ➡</button>
+                </div>
+                
+                <div id="noPendingMsg" class="success-state hidden">
+                    <i class="fa-solid fa-check-circle"></i>
+                    <h3>No pending items!</h3>
+                </div>
+            </div>
+
+            <div id="mode-bulk" class="mode-content hidden">
+                <div class="table-controls">
+                    <input type="text" id="bulkSearch" placeholder="Search pending..." onkeydown="if(event.key==='Enter') fetchBulkData(1)">
+                    <button class="btn-icon" onclick="fetchBulkData(1)"><i class="fa-solid fa-magnifying-glass"></i></button>
+                </div>
+                
+                <p class="record-count">Found <span id="bulkCount">0</span> records</p>
+                
+                <div class="table-wrapper small-height">
+                    <table class="modern-table small-text">
+                        <thead>
+                            <tr>
+                                <th width="40"><input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulk()"></th>
+                                <th>Address</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulkTableBody">
+                            </tbody>
+                    </table>
+                </div>
+
+                <div class="bulk-action-area">
+                    <select id="bulkLocalitySelect">
+                        <option value="">-- Target Locality --</option>
+                    </select>
+                    <button class="btn-primary" onclick="saveBulk()">Update Selected</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-add" class="tab-content">
+            <div class="form-container">
+                <h2>➕ Add New Master Locality</h2>
+                <p>Create a new locality and map it to an existing Zone.</p>
+
+                <div class="form-group">
+                    <label>New Locality Name:</label>
+                    <input type="text" id="newLocName" placeholder="e.g. New Area Phase 1">
+                </div>
+
+                <div class="form-group">
+                    <label>Assign to Zone:</label>
+                    <select id="newLocZone">
+                        <option value="">-- Select Existing Zone --</option>
+                    </select>
+                </div>
+
+                <button class="btn-primary" onclick="addNewMaster()">
+                    <i class="fa-solid fa-plus"></i> Add to Master Database
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/locality-static/Localitycorner.js"></script>
+</body>
+</html>

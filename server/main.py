@@ -35,7 +35,8 @@ DIRS = {
     "cleaner": CLIENT_DIR / "DataCleaner",
     "gps": CLIENT_DIR / "GPSCorner",
     "operation-manager": CLIENT_DIR / "OperationManager",
-    "sidebar": CLIENT_DIR / "Sidebar"
+    "locality": CLIENT_DIR / "LocalityCorner",
+    "components": CLIENT_DIR / "Components"
 }
 
 # --- 2. LIFESPAN (Startup) ---
@@ -74,16 +75,18 @@ app.mount("/home-static", StaticFiles(directory=DIRS["home"]), name="home_static
 app.mount("/login-static", StaticFiles(directory=DIRS["login"]), name="login_static")
 app.mount("/cleaner-static", StaticFiles(directory=DIRS["cleaner"]), name="cleaner_static")
 app.mount("/gps-corner-static", StaticFiles(directory=DIRS["gps"]), name="gps_static")
+app.mount("/locality-static", StaticFiles(directory=DIRS["locality"]), name="locality_static")
 app.mount("/operation-manager-static", StaticFiles(directory=DIRS["operation-manager"]), name="operation-manager_static")
-app.mount("/sidebar-static", StaticFiles(directory=DIRS["sidebar"]), name="sidebar_static")
+app.mount("/components-static", StaticFiles(directory=DIRS["components"]), name="components_static")
 
 templates = {
     "home": Jinja2Templates(directory=DIRS["home"]),
     "login": Jinja2Templates(directory=DIRS["login"]),
     "cleaner": Jinja2Templates(directory=DIRS["cleaner"]),
     "gps": Jinja2Templates(directory=DIRS["gps"]),
+    "locality": Jinja2Templates(directory=DIRS["locality"]),
     "operation-manager": Jinja2Templates(directory=DIRS["operation-manager"]),
-    "sidebar": Jinja2Templates(directory=DIRS["sidebar"]),
+    "components": Jinja2Templates(directory=DIRS["components"]),
 }
 
 # --- 5. AUTHENTICATION BACKEND ---
@@ -419,3 +422,7 @@ async def upload_operation_data(file: UploadFile = File(...)):
             status_code=500,
             content={"status": "error", "message": str(e)}
         )
+@app.get("/locality-manager")
+async def locality_page(request: Request):
+    if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
+    return templates["locality"].TemplateResponse("Localitycorner.html", {"request": request, "user": request.session.get("user")})

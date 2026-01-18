@@ -1,0 +1,126 @@
+/* General Reset */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* --- 1. Hamburger Button --- */
+.hamburger-btn {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    font-size: 24px;
+    background: #333;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    z-index: 1000; /* Stays on top */
+    transition: background 0.3s;
+}
+
+.hamburger-btn:hover {
+    background: #555;
+}
+
+/* --- 2. Overlay --- */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black */
+    z-index: 1001; /* Above content, below sidebar */
+    opacity: 0;
+    visibility: hidden; /* Hides it completely so you can click through */
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+/* State: Overlay Active */
+.sidebar-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* --- 3. Sidebar Container --- */
+.sidebar-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100vh;
+    background-color: #ffffff;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+    z-index: 1002; /* Highest level */
+    transform: translateX(-100%); /* Hidden by default (off-screen left) */
+    transition: transform 0.3s ease-in-out;
+    display: flex;
+    flex-direction: column;
+}
+
+/* State: Sidebar Open */
+.sidebar-container.open {
+    transform: translateX(0); /* Slide in */
+}
+
+/* Sidebar Header */
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background-color: #f4f4f4;
+    border-bottom: 1px solid #ddd;
+}
+
+.sidebar-header h2 {
+    font-size: 1.2rem;
+    color: #333;
+}
+
+/* Close Button */
+.close-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #555;
+}
+
+.close-btn:hover {
+    color: #ff0000;
+}
+
+/* Navigation Links */
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.nav-item {
+    text-decoration: none;
+    color: #333;
+    padding: 12px 15px;
+    margin-bottom: 5px;
+    border-radius: 6px;
+    font-size: 1rem;
+    transition: background 0.2s, color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nav-item:hover {
+    background-color: #f0f0f0;
+}
+
+/* Active Link styling */
+.nav-item.active {
+    background-color: #007bff;
+    color: white;
+}
