@@ -28,6 +28,7 @@ from .cleaner import process_client_data, process_raw_data, process_operation_da
 # --- 1. CONFIGURATION & PATHS ---
 BASE_DIR = Path(__file__).resolve().parent
 CLIENT_DIR = BASE_DIR.parent / "client"
+COMPONENTS_DIR = CLIENT_DIR / "Components"
 
 DIRS = {
     "home": CLIENT_DIR / "HomePage",
