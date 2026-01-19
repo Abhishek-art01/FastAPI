@@ -300,34 +300,43 @@ class BARawTripData(SQLModel, table=True):
 
 
 
-class t3_address_locality(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    address: Optional[str] = None
-    locality: Optional[str] = None
+class T3AddressLocality(SQLModel, table=True):
+    __tablename__ = "t3_address_locality"
 
-class t3_locality_zone(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    locality: Optional[str] = None
+    id: Optional[int] = Field(default=None)
+    address: str = Field(index=True, unique=True,primary_key=True) 
+    locality: Optional[str] = Field(default=None)
+    zone : Optional[str] = Field(default=None, foreign_key="t3_locality_zone.zone")
+    km : Optional[str] = Field(default=None, foreign_key="t3_zone_km.km")
+
+class T3LocalityZone(SQLModel, table=True):
+    __tablename__ = "t3_locality_zone"
+    id: Optional[int] = Field(default=None)
+    locality: Optional[str] = Field(index=True, unique=True,primary_key=True)
     zone: Optional[str] = None
 
-class t3_zone_km(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    zone: Optional[str] = None
+class T3ZoneKm(SQLModel, table=True):
+    __tablename__ = "t3_zone_km"
+    id: Optional[int] = Field(default=None)
+    zone: Optional[str] = Field(index=True, unique=True,primary_key=True)
     km: Optional[str] = None
 
 
 
 class AITA75_35_address_locality(SQLModel, table=True):
+    __tablename__ = "AITA75_35_address_locality"
     id: Optional[int] = Field(default=None, primary_key=True)
     address: Optional[str] = None
-    locality: Optional[str] = None
+    locality: Optional[str] = None  
 
 class AITA75_35_locality_zone(SQLModel, table=True):
+    __tablename__ = "AITA75_35_locality_zone"
     id: Optional[int] = Field(default=None, primary_key=True)
     locality: Optional[str] = None
     zone: Optional[str] = None
 
 class AITA75_35_zone_km(SQLModel, table=True):
+    __tablename__ = "AITA75_35_zone_km"
     id: Optional[int] = Field(default=None, primary_key=True)
     zone: Optional[str] = None
     km: Optional[str] = None    

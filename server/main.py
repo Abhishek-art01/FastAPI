@@ -1,5 +1,6 @@
 import os
 import io
+from sqlalchemy import text
 import pandas as pd
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -22,7 +23,7 @@ from sqladmin.authentication import AuthenticationBackend
 # --- INTERNAL IMPORTS ---
 from .auth import verify_password, get_password_hash
 from .database import create_db_and_tables, get_session, engine
-from .models import User, ClientData, RawTripData, OperationData, TripData 
+from .models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm
 from .cleaner import process_client_data, process_raw_data, process_operation_data
 
 # --- 1. CONFIGURATION & PATHS ---
@@ -131,6 +132,12 @@ class TripDataAdmin(ModelView, model=TripData): column_list = [TripData.shift_da
 class ClientDataAdmin(ModelView, model=ClientData): column_list = [ClientData.id, ClientData.unique_id, ClientData.employee_name]
 class RawTripDataAdmin(ModelView, model=RawTripData): column_list = [RawTripData.id, RawTripData.unique_id, RawTripData.trip_date]
 class OperationDataAdmin(ModelView, model=OperationData): column_list = [OperationData.id, OperationData.unique_id]
+class AddressLocalityAdmin(ModelView, model=T3AddressLocality):
+    name = "Address Master"
+    icon = "fa-solid fa-map-pin"
+    column_list = [T3AddressLocality.id, T3AddressLocality.address, T3AddressLocality.locality]
+    column_searchable_list = [T3AddressLocality.address, T3AddressLocality.locality]
+
 
 admin = Admin(app, engine, authentication_backend=AdminAuth(secret_key="super_secret_static_key"))
 admin.add_view(UserAdmin)
@@ -138,6 +145,116 @@ admin.add_view(TripDataAdmin)
 admin.add_view(ClientDataAdmin)
 admin.add_view(RawTripDataAdmin)
 admin.add_view(OperationDataAdmin)
+admin.add_view(AddressLocalityAdmin)
+
+# --- 6. HELPER FUNCTIONS ---
+def bulk_save_unique(session: Session, model_class, df: pd.DataFrame, unique_col: str = "unique_id") -> int:
+    """Helper to insert only new rows into database based on a unique column."""
+    if df is None or df.empty or unique_col not in df.columns:
+        return 0
+    
+    incoming_ids = df[unique_col].dropna().unique().tolist()
+    if not incoming_ids: return 0
+
+    existing_ids = set(session.exec(select(getattr(model_class, unique_col)).where(col(getattr(model_class, unique_col)).in_(incoming_ids))).all())
+    new_rows = df[~df[unique_col].isin(existing_ids)]
+    
+    if not new_rows.empty:
+        records = [model_class(**row.where(pd.notnull(row), None).to_dict()) for _, row in new_rows.iterrows()]
+        session.add_all(records)
+        session.commit()
+        return len(new_rows)
+    return 0
+
+def sync_addresses_to_t3(session: Session, df: pd.DataFrame) -> int:
+    """
+    Extracts unique addresses from the uploaded dataframe and adds NEW ones
+    to the t3_address_locality table. Handles duplicates and ID conflicts.
+    """
+    # 1. Identify Address Column
+    address_col = None
+    possible_names = ["address", "Address", "employee_address", "Employee Address", "pickup_location", "drop_location"]
+    
+    for col_name in possible_names:
+        if col_name in df.columns:
+            address_col = col_name
+            break
+    
+    if not address_col:
+        print("⚠️ T3 Sync: No address column found in uploaded file.")
+        return 0
+
+    # 2. Extract Unique Addresses from File
+    file_addresses = set(
+        df[address_col]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .unique()
+    )
+    file_addresses.discard("") # Remove empty strings
+
+    if not file_addresses:
+        return 0
+
+    # 3. Find Addresses ALREADY in Database
+    # Fetch all existing addresses to compare against
+    # Use chunking if you have millions of rows, but for thousands, this is fine.
+    existing_db_addresses = set(session.exec(select(T3AddressLocality.address)).all())
+    
+    # 4. Filter New Addresses
+    new_addresses_list = list(file_addresses - existing_db_addresses)
+
+    if not new_addresses_list:
+        print("✅ T3 Sync: All addresses already exist.")
+        return 0
+
+    print(f"📍 T3 Sync: Found {len(new_addresses_list)} NEW addresses. Inserting...")
+
+    # 5. Insert One-by-One to Isolate Failures (Safer for debugging conflicts)
+    # Or Bulk Insert if confident. Let's try a safer Bulk approach.
+    
+    records = [T3AddressLocality(address=addr, locality=None) for addr in new_addresses_list]
+    
+    try:
+        session.add_all(records)
+        session.commit()
+        return len(records)
+    except Exception as e:
+        session.rollback()
+        print(f"❌ T3 Sync Error: {e}")
+        
+        # AUTO-FIX: Attempt to reset the ID sequence if it's a Primary Key error
+        if "t3_address_locality_pkey" in str(e) or "UniqueViolation" in str(e):
+            print("🔧 Attempting to fix ID sequence...")
+            try:
+                # This SQL command resets the ID counter to the max ID + 1
+                session.exec(text("SELECT setval(pg_get_serial_sequence('t3_address_locality', 'id'), coalesce(max(id),0) + 1, false) FROM t3_address_locality;"))
+                session.commit()
+                
+                # Retry Insert
+                print("🔄 Retrying insert after sequence fix...")
+                session.add_all(records)
+                session.commit()
+                return len(records)
+            except Exception as retry_e:
+                print(f"❌ Retry Failed: {retry_e}")
+                return 0
+        return 0
+
+# 1. Pydantic Schemas for Requests
+class LocalityMappingSchema(BaseModel):
+    address_id: int
+    locality_id: int
+
+class BulkMappingSchema(BaseModel):
+    address_ids: List[int]
+    locality_id: int
+
+class NewMasterSchema(BaseModel):
+    locality_name: str
+    zone_name: str
+
 
 # --- 7. PAGE ROUTES ---
 @app.get("/")
@@ -195,10 +312,19 @@ async def clean_data(
         df_result = None
         excel_output = None
         filename = "output.xlsx"
+        rows_saved = 0
+        new_addresses = 0
 
+
+        # --- A. CLIENT DATA ---
         if cleanerType == "client":
             content = await files[0].read()
             df_result, excel_output, filename = process_client_data(content)
+            rows_saved = bulk_save_unique(session, ClientData, df_result)
+            
+            # 🔥 SYNC ADDRESSES
+            if df_result is not None:
+                new_addresses = sync_addresses_to_t3(session, df_result)
             
             if df_result is not None and not df_result.empty and "unique_id" in df_result.columns:
                 incoming_ids = df_result["unique_id"].dropna().unique().tolist()
@@ -209,13 +335,18 @@ async def clean_data(
                     session.add_all(records)
                     session.commit()
 
+        # --- B. RAW DATA ---
         elif cleanerType == "raw":
             file_data = []
             for f in files:
                 content = await f.read()
                 file_data.append((f.filename, content))
-
             df_result, excel_output, filename = process_raw_data(file_data)
+            rows_saved = bulk_save_unique(session, RawTripData, df_result)
+            
+            # 🔥 SYNC ADDRESSES (Usually raw data has addresses too)
+            if df_result is not None:
+                new_addresses = sync_addresses_to_t3(session, df_result)
             
             if df_result is not None and not df_result.empty and "unique_id" in df_result.columns:
                 incoming_ids = df_result["unique_id"].dropna().unique().tolist()
@@ -246,7 +377,8 @@ async def clean_data(
         return {
             "status": "success",
             "file_url": filename,
-            "rows_processed": row_count
+            "rows_processed": row_count,
+            "db_rows_added": rows_saved
         }
 
     except Exception as e:
@@ -423,7 +555,118 @@ async def upload_operation_data(file: UploadFile = File(...)):
             status_code=500,
             content={"status": "error", "message": str(e)}
         )
+
+# ==========================================
+# 4. Locality Manager ENDPOINTS
+# ==========================================
+
 @app.get("/locality-manager")
 async def locality_page(request: Request):
     if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
     return templates["locality"].TemplateResponse("Localitycorner.html", {"request": request, "user": request.session.get("user")})
+# 2. API: Get Dropdown Data
+@app.get("/api/dropdown-localities/")
+def get_master_localities(session: Session = Depends(get_session)):
+    return session.exec(select(T3LocalityZone).order_by(T3LocalityZone.locality)).all()
+
+# 3. API: View All / Pagination
+@app.get("/api/localities/")
+def get_address_table(page: int = 1, search: str = "", session: Session = Depends(get_session)):
+    limit = 20
+    offset = (page - 1) * limit
+    
+    # Base Query
+    query = select(T3AddressLocality, T3LocalityZone)\
+        .join(T3LocalityZone, isouter=True)\
+        .order_by(desc(T3AddressLocality.id))
+    
+    # Filter
+    if search:
+        query = query.where(T3AddressLocality.address.contains(search))
+    
+    # Pagination Counts
+    total_records = len(session.exec(select(T3AddressLocality).where(T3AddressLocality.address.contains(search))).all())
+    pending_count = len(session.exec(select(T3AddressLocality).where(T3AddressLocality.locality_id == None)).all())
+    
+    # Execute Paginated Query
+    results = session.exec(query.offset(offset).limit(limit)).all()
+    
+    # Format Data for JS
+    data = []
+    for address_row, zone_row in results:
+        data.append({
+            "id": address_row.id,
+            "address": address_row.address,
+            "locality_id": address_row.locality_id,
+            "locality": zone_row.locality if zone_row else None,
+            "zone": zone_row.zone if zone_row else None,
+            "km": zone_row.km if zone_row else 0,
+            "status": "Done" if address_row.locality_id else "Pending"
+        })
+        
+    return {
+        "results": data,
+        "pagination": {"total_pages": (total_records // limit) + 1},
+        "global_pending": pending_count
+    }
+
+# 4. API: Get Next Pending Item (Auto Mode)
+@app.get("/api/next-pending/")
+def get_next_pending(session: Session = Depends(get_session)):
+    row = session.exec(select(T3AddressLocality).where(T3AddressLocality.locality_id == None).limit(1)).first()
+    if not row:
+        return {"found": False}
+    return {"found": True, "data": row}
+
+# 5. API: Save Single Mapping
+@app.post("/api/save-mapping/")
+def save_mapping(data: LocalityMappingSchema, session: Session = Depends(get_session)):
+    row = session.get(T3AddressLocality, data.address_id)
+    if not row:
+        return JSONResponse({"success": False, "error": "Address not found"}, status_code=404)
+    
+    row.locality_id = data.locality_id
+    session.add(row)
+    session.commit()
+    return {"success": True}
+
+# 6. API: Search Pending (Bulk Mode)
+@app.get("/api/search-pending/")
+def search_pending(q: str = "", page: int = 1, session: Session = Depends(get_session)):
+    limit = 50
+    offset = (page - 1) * limit
+    
+    query = select(T3AddressLocality).where(T3AddressLocality.locality_id == None)
+    if q:
+        query = query.where(T3AddressLocality.address.contains(q))
+        
+    total = len(session.exec(query).all())
+    results = session.exec(query.offset(offset).limit(limit)).all()
+    
+    return {
+        "results": results,
+        "pagination": {"total_records": total}
+    }
+
+# 7. API: Bulk Save
+@app.post("/api/bulk-save/")
+def bulk_save(data: BulkMappingSchema, session: Session = Depends(get_session)):
+    statement = (
+        update(T3AddressLocality)
+        .where(col(T3AddressLocality.id).in_(data.address_ids))
+        .values(locality_id=data.locality_id)
+    )
+    result = session.exec(statement)
+    session.commit()
+    return {"success": True, "count": result.rowcount}
+
+# 8. API: Add New Master Locality
+@app.post("/api/add-master-locality/")
+def add_master(data: NewMasterSchema, session: Session = Depends(get_session)):
+    try:
+        new_loc = T3LocalityZone(locality=data.locality_name, zone=data.zone_name)
+        session.add(new_loc)
+        session.commit()
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
