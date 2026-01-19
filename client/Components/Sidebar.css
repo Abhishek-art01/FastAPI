@@ -18,7 +18,8 @@
     border-radius: 4px;
     padding: 8px 12px;
     cursor: pointer;
-    z-index: 1000; /* Stays on top */
+    z-index: 1000;
+    /* Stays on top */
     transition: background 0.3s;
 }
 
@@ -33,10 +34,13 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black */
-    z-index: 1001; /* Above content, below sidebar */
+    background-color: rgba(0, 0, 0, 0.5);
+    /* Semi-transparent black */
+    z-index: 1001;
+    /* Above content, below sidebar */
     opacity: 0;
-    visibility: hidden; /* Hides it completely so you can click through */
+    visibility: hidden;
+    /* Hides it completely so you can click through */
     transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
@@ -55,8 +59,10 @@
     height: 100vh;
     background-color: #ffffff;
     box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
-    z-index: 1002; /* Highest level */
-    transform: translateX(-100%); /* Hidden by default (off-screen left) */
+    z-index: 1002;
+    /* Highest level */
+    transform: translateX(-100%);
+    /* Hidden by default (off-screen left) */
     transition: transform 0.3s ease-in-out;
     display: flex;
     flex-direction: column;
@@ -64,7 +70,8 @@
 
 /* State: Sidebar Open */
 .sidebar-container.open {
-    transform: translateX(0); /* Slide in */
+    transform: translateX(0);
+    /* Slide in */
 }
 
 /* Sidebar Header */
