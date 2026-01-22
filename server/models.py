@@ -199,21 +199,37 @@ class OperationData(SQLModel, table=True):
     gps_time: Optional[str] = None
     gps_remark: Optional[str] = None
 
-class t3_address_locality(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    address: Optional[str] = None
-    locality: Optional[str] = None
+# server/models.py
 
-class t3_locality_zone(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    locality: Optional[str] = None
-    zone: Optional[str] = None
+from typing import Optional
+from sqlmodel import SQLModel, Field
 
-class t3_zone_km(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    zone: Optional[str] = None
-    km: Optional[str] = None
+# ... (Keep User, ClientData, etc. at the top) ...
 
+# 1. Zone & KM Table (The Base)
+class T3ZoneKm(SQLModel, table=True):
+    __tablename__ = "t3_zone_km"
+
+    zone: str = Field(primary_key=True) 
+    km: str 
+
+# 2. Locality & Zone Table (Links to Zone)
+class T3LocalityZone(SQLModel, table=True):
+    __tablename__ = "t3_locality_zone"
+
+    locality: str = Field(primary_key=True)
+    zone: Optional[str] = Field(default=None, foreign_key="t3_zone_km.zone")
+
+# 3. Address Table (Links to Locality)
+class T3AddressLocality(SQLModel, table=True):
+    __tablename__ = "t3_address_locality"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    address: str = Field(index=True, unique=True)
+    locality: Optional[str] = Field(default=None, foreign_key="t3_locality_zone.locality")
+    
+    zone: Optional[str] = Field(default=None)
+    km: Optional[str] = Field(default=None)
 
 
 class AITA75_35_address_locality(SQLModel, table=True):

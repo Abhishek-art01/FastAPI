@@ -1,17 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Locality Manager</title>
-    
-    <link rel="stylesheet" href="/shared-static/sidebar.css">
-    <script src="/shared-static/sidebar.js"></script>
+
+    <link rel="stylesheet" href="/components-static/sidebar.css">
+    <script src="/components-static/sidebar.js"></script>
 
     <link rel="stylesheet" href="/locality-static/Localitycorner.css">
-    
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+
 <body>
 
     <div class="main-content">
@@ -36,10 +38,12 @@
 
         <div id="tab-view" class="tab-content active">
             <div class="table-controls">
-                <input type="text" id="viewSearch" placeholder="Filter Address..." onkeydown="if(event.key==='Enter') fetchTableData(1)">
-                <button class="btn-icon" onclick="fetchTableData(1)"><i class="fa-solid fa-magnifying-glass"></i></button>
+                <input type="text" id="viewSearch" placeholder="Filter Address..."
+                    onkeydown="if(event.key==='Enter') fetchTableData(1)">
+                <button class="btn-icon" onclick="fetchTableData(1)"><i
+                        class="fa-solid fa-magnifying-glass"></i></button>
             </div>
-            
+
             <div class="table-wrapper">
                 <table class="modern-table">
                     <thead>
@@ -54,7 +58,7 @@
                         </tr>
                     </thead>
                     <tbody id="viewTableBody">
-                        </tbody>
+                    </tbody>
                 </table>
             </div>
 
@@ -75,7 +79,7 @@
                 <div id="pendingCard" class="pending-card hidden">
                     <label>Address:</label>
                     <div class="highlight-box" id="pendingAddress">Loading...</div>
-                    
+
                     <div class="form-group">
                         <label>Select Locality</label>
                         <select id="singleLocalitySelect" onchange="updatePreview()">
@@ -90,7 +94,7 @@
 
                     <button class="btn-primary" onclick="saveSinglePending()">Save & Next ➡</button>
                 </div>
-                
+
                 <div id="noPendingMsg" class="success-state hidden">
                     <i class="fa-solid fa-check-circle"></i>
                     <h3>No pending items!</h3>
@@ -99,22 +103,25 @@
 
             <div id="mode-bulk" class="mode-content hidden">
                 <div class="table-controls">
-                    <input type="text" id="bulkSearch" placeholder="Search pending..." onkeydown="if(event.key==='Enter') fetchBulkData(1)">
-                    <button class="btn-icon" onclick="fetchBulkData(1)"><i class="fa-solid fa-magnifying-glass"></i></button>
+                    <input type="text" id="bulkSearch" placeholder="Search pending..."
+                        onkeydown="if(event.key==='Enter') fetchBulkData(1)">
+                    <button class="btn-icon" onclick="fetchBulkData(1)"><i
+                            class="fa-solid fa-magnifying-glass"></i></button>
                 </div>
-                
+
                 <p class="record-count">Found <span id="bulkCount">0</span> records</p>
-                
+
                 <div class="table-wrapper small-height">
                     <table class="modern-table small-text">
                         <thead>
                             <tr>
-                                <th width="40"><input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulk()"></th>
+                                <th width="40"><input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulk()">
+                                </th>
                                 <th>Address</th>
                             </tr>
                         </thead>
                         <tbody id="bulkTableBody">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
 
@@ -154,4 +161,5 @@
 
     <script src="/locality-static/Localitycorner.js"></script>
 </body>
+
 </html>

@@ -12,8 +12,8 @@ document.addEventListener("DOMContentLoaded", function () {
             <a href="/" class="nav-item">📊 Dashboard</a>
             <a href="/cleaner" class="nav-item">🚚 Cleaner</a>
             <a href="/gps-corner" class="nav-item">🛰️ GPS Corner</a>
-            <a href="//locality-manager" class="nav-item">🏙️ Locality Manager</a>
-             <a href="/operation-manager" class="nav-item">🏙️ Downloads</a>
+            <a href="/locality-manager" class="nav-item">🏙️ Locality Manager</a>
+            <a href="/operation-manager" class="nav-item">🏙️ Downloads</a>
             <a href="/admin" class="nav-item">🏙️ Admin</a>
             <a href="/logout" class="nav-item" style="color:red; margin-top: auto;">🚪 Logout</a>
         </nav>
@@ -39,9 +39,9 @@ document.addEventListener("DOMContentLoaded", function () {
         overlay.classList.remove('active');
     }
 
-    if(hamburgerBtn) hamburgerBtn.addEventListener('click', toggleSidebar);
-    if(closeBtn) closeBtn.addEventListener('click', closeSidebar);
-    if(overlay) overlay.addEventListener('click', closeSidebar);
+    if (hamburgerBtn) hamburgerBtn.addEventListener('click', toggleSidebar);
+    if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+    if (overlay) overlay.addEventListener('click', closeSidebar);
 
     // 4. Highlight Active Link
     const currentPath = window.location.pathname;
