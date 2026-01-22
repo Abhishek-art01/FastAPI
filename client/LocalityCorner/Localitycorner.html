@@ -10,7 +10,6 @@
     <script src="/components-static/sidebar.js"></script>
 
     <link rel="stylesheet" href="/locality-static/Localitycorner.css">
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
@@ -130,6 +129,61 @@
                         <option value="">-- Target Locality --</option>
                     </select>
                     <button class="btn-primary" onclick="saveBulk()">Update Selected</button>
+                </div>
+            </div>
+            <div id="mode-bulk" class="mode-content hidden">
+
+                <div class="bulk-action-area"
+                    style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+                    <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+
+                        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+                            <label style="display:block; margin-bottom:5px; font-weight:600;">Target Locality</label>
+                            <select id="bulkLocalitySelect" onchange="updateBulkPreview()"
+                                style="width: 100%; padding: 8px;">
+                                <option value="">-- Select Locality --</option>
+                            </select>
+                        </div>
+
+                        <div
+                            style="background: white; padding: 5px 15px; border: 1px solid #ccc; border-radius: 4px; min-width: 120px;">
+                            <small style="color: #666; display: block;">Zone</small>
+                            <strong id="bulkPreviewZone" style="font-size: 1.1rem;">-</strong>
+                        </div>
+
+                        <div
+                            style="background: white; padding: 5px 15px; border: 1px solid #ccc; border-radius: 4px; min-width: 80px;">
+                            <small style="color: #666; display: block;">KM</small>
+                            <strong id="bulkPreviewKM" style="font-size: 1.1rem;">-</strong>
+                        </div>
+
+                        <button class="btn-primary" onclick="saveBulk()" style="height: 40px; margin-bottom: 2px;">
+                            Update Selected
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-controls">
+                    <input type="text" id="bulkSearch" placeholder="Search pending addresses..."
+                        onkeydown="if(event.key==='Enter') fetchBulkData(1)">
+                    <button class="btn-icon" onclick="fetchBulkData(1)"><i
+                            class="fa-solid fa-magnifying-glass"></i></button>
+                </div>
+
+                <p class="record-count">Found <span id="bulkCount">0</span> records</p>
+
+                <div class="table-wrapper small-height">
+                    <table class="modern-table small-text">
+                        <thead>
+                            <tr>
+                                <th width="40"><input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulk()">
+                                </th>
+                                <th>Address</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulkTableBody">
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

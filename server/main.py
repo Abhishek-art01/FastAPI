@@ -41,10 +41,21 @@ DIRS = {
     "components": CLIENT_DIR / "Components"
 }
 
-# --- 2. LIFESPAN (Startup) ---
+
+# --- 2. LIFESPAN (Startup & Sequence Fix) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
+    
+    # Auto-fix sequence for Address Table (Prevents "Key (id)=(x) already exists" error)
+    try:
+        with Session(engine) as session:
+            session.exec(text("SELECT setval(pg_get_serial_sequence('t3_address_locality', 'id'), coalesce(max(id),0) + 1, false) FROM t3_address_locality;"))
+            session.commit()
+            print("✅ Address Table Sequence Sync Completed.")
+    except Exception:
+        pass 
+        
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -242,18 +253,6 @@ def sync_addresses_to_t3(session: Session, df: pd.DataFrame) -> int:
                 return 0
         return 0
 
-# 1. Pydantic Schemas for Requests
-class LocalityMappingSchema(BaseModel):
-    address_id: int
-    locality_id: int
-
-class BulkMappingSchema(BaseModel):
-    address_ids: List[int]
-    locality_id: int
-
-class NewMasterSchema(BaseModel):
-    locality_name: str
-    zone_name: str
 
 
 # --- 7. PAGE ROUTES ---
@@ -298,6 +297,9 @@ async def operation_manager_page(request: Request):
     if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
     return templates["operation-manager"].TemplateResponse("operation_manager.html", {"request": request})
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204) 
 # ==========================================
 # 🚀 DATA CLEANER API 
 # ==========================================
@@ -557,17 +559,39 @@ async def upload_operation_data(file: UploadFile = File(...)):
         )
 
 # ==========================================
-# 4. Locality Manager ENDPOINTS
+# 📍 LOCALITY MANAGER API (Complete)
 # ==========================================
 
+# 1. PAGE ROUTE
 @app.get("/locality-manager")
-async def locality_page(request: Request):
+async def locality_manager_page(request: Request):
     if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
     return templates["locality"].TemplateResponse("Localitycorner.html", {"request": request, "user": request.session.get("user")})
-# 2. API: Get Dropdown Data
+
+# --- Pydantic Schemas ---
+class LocalityMappingSchema(BaseModel):
+    address_id: int
+    locality_name: str 
+
+class BulkMappingSchema(BaseModel):
+    address_ids: List[int]
+    locality_name: str
+
+class NewMasterSchema(BaseModel):
+    locality_name: str
+    zone_name: str
+
+# 2. API: Get Dropdown Data (One-line fetch & format)
 @app.get("/api/dropdown-localities/")
 def get_master_localities(session: Session = Depends(get_session)):
-    return session.exec(select(T3LocalityZone).order_by(T3LocalityZone.locality)).all()
+    return [
+        {**loc.model_dump(), "billing_km": km or "-"} 
+        for loc, km in session.exec(
+            select(T3LocalityZone, T3ZoneKm.km)
+            .join(T3ZoneKm, T3LocalityZone.zone == T3ZoneKm.zone, isouter=True)
+            .order_by(T3LocalityZone.locality)
+        ).all()
+    ]
 
 # 3. API: View All / Pagination
 @app.get("/api/localities/")
@@ -575,33 +599,30 @@ def get_address_table(page: int = 1, search: str = "", session: Session = Depend
     limit = 20
     offset = (page - 1) * limit
     
-    # Base Query
-    query = select(T3AddressLocality, T3LocalityZone)\
-        .join(T3LocalityZone, isouter=True)\
+    # Correct JOIN for your Schema: Address -> LocalityZone -> ZoneKm
+    query = select(T3AddressLocality, T3LocalityZone, T3ZoneKm)\
+        .join(T3LocalityZone, T3AddressLocality.locality == T3LocalityZone.locality, isouter=True)\
+        .join(T3ZoneKm, T3LocalityZone.zone == T3ZoneKm.zone, isouter=True)\
         .order_by(desc(T3AddressLocality.id))
     
-    # Filter
     if search:
         query = query.where(T3AddressLocality.address.contains(search))
     
-    # Pagination Counts
     total_records = len(session.exec(select(T3AddressLocality).where(T3AddressLocality.address.contains(search))).all())
-    pending_count = len(session.exec(select(T3AddressLocality).where(T3AddressLocality.locality_id == None)).all())
+    pending_count = len(session.exec(select(T3AddressLocality).where(col(T3AddressLocality.locality).is_(None))).all())
     
-    # Execute Paginated Query
     results = session.exec(query.offset(offset).limit(limit)).all()
     
-    # Format Data for JS
     data = []
-    for address_row, zone_row in results:
+    for address_row, locality_row, zone_km_row in results:
         data.append({
             "id": address_row.id,
             "address": address_row.address,
-            "locality_id": address_row.locality_id,
-            "locality": zone_row.locality if zone_row else None,
-            "zone": zone_row.zone if zone_row else None,
-            "km": zone_row.km if zone_row else 0,
-            "status": "Done" if address_row.locality_id else "Pending"
+            "locality_id": address_row.locality, # String is the ID here
+            "locality": address_row.locality,
+            "zone": locality_row.zone if locality_row else None, 
+            "km": zone_km_row.km if zone_km_row else 0, # Fetch KM from joined table
+            "status": "Done" if address_row.locality else "Pending"
         })
         
     return {
@@ -610,10 +631,10 @@ def get_address_table(page: int = 1, search: str = "", session: Session = Depend
         "global_pending": pending_count
     }
 
-# 4. API: Get Next Pending Item (Auto Mode)
+# 4. API: Get Next Pending Item
 @app.get("/api/next-pending/")
 def get_next_pending(session: Session = Depends(get_session)):
-    row = session.exec(select(T3AddressLocality).where(T3AddressLocality.locality_id == None).limit(1)).first()
+    row = session.exec(select(T3AddressLocality).where(col(T3AddressLocality.locality).is_(None)).limit(1)).first()
     if not row:
         return {"found": False}
     return {"found": True, "data": row}
@@ -625,18 +646,32 @@ def save_mapping(data: LocalityMappingSchema, session: Session = Depends(get_ses
     if not row:
         return JSONResponse({"success": False, "error": "Address not found"}, status_code=404)
     
-    row.locality_id = data.locality_id
+    # Update Relation
+    row.locality = data.locality_name
+    
+    # Update Cache Fields (Zone/KM) automatically
+    locality_info = session.exec(
+        select(T3LocalityZone, T3ZoneKm)
+        .join(T3ZoneKm, T3LocalityZone.zone == T3ZoneKm.zone, isouter=True)
+        .where(T3LocalityZone.locality == data.locality_name)
+    ).first()
+
+    if locality_info:
+        loc_row, km_row = locality_info
+        row.zone = loc_row.zone
+        row.km = km_row.km if km_row else None
+
     session.add(row)
     session.commit()
     return {"success": True}
 
-# 6. API: Search Pending (Bulk Mode)
+# 6. API: Search Pending
 @app.get("/api/search-pending/")
 def search_pending(q: str = "", page: int = 1, session: Session = Depends(get_session)):
     limit = 50
     offset = (page - 1) * limit
     
-    query = select(T3AddressLocality).where(T3AddressLocality.locality_id == None)
+    query = select(T3AddressLocality).where(col(T3AddressLocality.locality).is_(None))
     if q:
         query = query.where(T3AddressLocality.address.contains(q))
         
@@ -651,10 +686,23 @@ def search_pending(q: str = "", page: int = 1, session: Session = Depends(get_se
 # 7. API: Bulk Save
 @app.post("/api/bulk-save/")
 def bulk_save(data: BulkMappingSchema, session: Session = Depends(get_session)):
+    cache_values = {"locality": data.locality_name}
+    
+    locality_info = session.exec(
+        select(T3LocalityZone, T3ZoneKm)
+        .join(T3ZoneKm, T3LocalityZone.zone == T3ZoneKm.zone, isouter=True)
+        .where(T3LocalityZone.locality == data.locality_name)
+    ).first()
+
+    if locality_info:
+        loc_row, km_row = locality_info
+        cache_values["zone"] = loc_row.zone
+        cache_values["km"] = km_row.km if km_row else None
+
     statement = (
         update(T3AddressLocality)
         .where(col(T3AddressLocality.id).in_(data.address_ids))
-        .values(locality_id=data.locality_id)
+        .values(**cache_values)
     )
     result = session.exec(statement)
     session.commit()
@@ -664,6 +712,10 @@ def bulk_save(data: BulkMappingSchema, session: Session = Depends(get_session)):
 @app.post("/api/add-master-locality/")
 def add_master(data: NewMasterSchema, session: Session = Depends(get_session)):
     try:
+        # Auto-create Zone if missing to avoid FK error
+        if not session.get(T3ZoneKm, data.zone_name):
+             session.add(T3ZoneKm(zone=data.zone_name, km="0")) 
+        
         new_loc = T3LocalityZone(locality=data.locality_name, zone=data.zone_name)
         session.add(new_loc)
         session.commit()
