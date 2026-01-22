@@ -242,6 +242,44 @@ class BARawTripData(SQLModel, table=True):
     gps_time: Optional[str] = None
     gps_remark: Optional[str] = None
 
+# server/models.py (Add to bottom)
+
+class BARowData(SQLModel, table=True):
+    __tablename__ = "ba_row_data"
+    
+    # We use Trip Id as the unique identifier
+    trip_id: int = Field(primary_key=True, alias="Trip Id") 
+    
+    leg_date: Optional[str] = Field(default=None, alias="Leg Date")
+    employee_id: Optional[str] = Field(default=None, alias="Employee ID")
+    employee_name: Optional[str] = Field(default=None, alias="Employee Name")
+    gender: Optional[str] = Field(default=None, alias="Gender")
+    emp_category: Optional[str] = Field(default=None, alias="EMP_CATEGORY")
+    
+    shift_time: Optional[str] = Field(default=None, alias="Shift Time")
+    pickup_time: Optional[str] = Field(default=None, alias="Pickup Time")
+    drop_time: Optional[str] = Field(default=None, alias="Drop Time")
+    trip_direction: Optional[str] = Field(default=None, alias="Trip Direction")
+    
+    registration: Optional[str] = Field(default=None, alias="Registration")
+    cab_type: Optional[str] = Field(default=None, alias="Cab Type")
+    vendor: Optional[str] = Field(default=None, alias="Vendor")
+    office: Optional[str] = Field(default=None, alias="Office")
+    
+    airport_name: Optional[str] = Field(default=None, alias="Airport Name")
+    landmark: Optional[str] = Field(default=None, alias="Landmark")
+    address: Optional[str] = Field(default=None, alias="Address")
+    
+    # Audit & Remarks
+    ba_remark: Optional[str] = Field(default=None, alias="BA REMARK")
+    mis_remark: Optional[str] = Field(default=None, alias="MiS Remark")
+    route_status: Optional[str] = Field(default=None, alias="Route Status")
+    trip_date: Optional[str] = Field(default=None, alias="Trip Date")
+    
+    # Allow extra columns to be stored flexibly if needed, or define strict fields
+    class Config:
+        arbitrary_types_allowed = True
+
 
 
 # 1. Zone & KM Table (The Base)

@@ -23,8 +23,8 @@ from sqladmin.authentication import AuthenticationBackend
 # --- INTERNAL IMPORTS ---
 from .auth import verify_password, get_password_hash
 from .database import create_db_and_tables, get_session, engine
-from .models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm
-from .cleaner import process_client_data, process_raw_data, process_operation_data
+from .models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
+from .cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data
 
 # --- 1. CONFIGURATION & PATHS ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -358,6 +358,7 @@ async def clean_data(
                     records = [RawTripData(**row.to_dict()) for _, row in new_rows.iterrows()]
                     session.add_all(records)
                     session.commit()
+        # --- C. OPERATION ---            
 
         elif cleanerType == "operation":
             file_data = []
@@ -366,27 +367,55 @@ async def clean_data(
                 file_data.append((f.filename, content))
             df_result, excel_output, filename = process_operation_data(file_data)
 
-        if excel_output is None:
-            return Response("Error processing data", status_code=400)
+            if excel_output is None:
+                return Response("Error processing data", status_code=400)
 
-        generated_dir = DIRS["cleaner"] / "generated"
-        os.makedirs(generated_dir, exist_ok=True)
-        save_path = generated_dir / filename
-        with open(save_path, "wb") as f:
-            f.write(excel_output.read())
+            generated_dir = DIRS["cleaner"] / "generated"
+            os.makedirs(generated_dir, exist_ok=True)
+            save_path = generated_dir / filename
+            with open(save_path, "wb") as f:
+                f.write(excel_output.read())
 
-        row_count = len(df_result) if df_result is not None else "Formatting Only"
-        return {
-            "status": "success",
-            "file_url": filename,
-            "rows_processed": row_count,
-            "db_rows_added": rows_saved
-        }
+            row_count = len(df_result) if df_result is not None else "Formatting Only"
+            return {
+                "status": "success",
+                "file_url": filename,
+                "rows_processed": row_count,
+                "db_rows_added": rows_saved
+            }
+
+        # --- D. BA ROW DATA (CSV) ---
+        elif cleanerType == "ba_row":
+            content = await files[0].read()
+            df_result, excel_output, filename = process_ba_row_data(content)
+            
+            # ... (Existing Database Logic) ...
+
+            # ✅ ADD THIS BLOCK TO SAVE THE FILE AND RETURN RESPONSE
+            if excel_output is None:
+                return Response("Error processing BA data", status_code=400)
+
+            # 1. Save the generated file to disk so the frontend can download it
+            generated_dir = DIRS["cleaner"] / "generated"  # Ensure you have DIRS defined or use a hardcoded path
+            os.makedirs(generated_dir, exist_ok=True)
+            save_path = generated_dir / filename
+            
+            with open(save_path, "wb") as f:
+                f.write(excel_output.read())
+
+            # 2. Return the JSON response the frontend is waiting for
+            row_count = len(df_result) if df_result is not None else 0
+            return {
+                "status": "success",
+                "file_url": filename,
+                "rows_processed": row_count,
+                "db_rows_added": rows_saved
+            }
 
     except Exception as e:
         print(f"❌ Server Error: {e}")
         return Response(f"Internal Error: {e}", status_code=500)
-
+        
 
 
 # ==========================================

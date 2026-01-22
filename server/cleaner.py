@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import io
+import re
 import xlrd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
@@ -185,7 +186,7 @@ def process_client_data(file_content):
 # ==========================================
 # 2. RAW DATA CLEANER
 # ==========================================
-def _clean_single_raw_df(df):
+def clean_single_raw_df(df):
     try:
         # Trip ID Logic
         df["Trip_ID"] = np.where(df.iloc[:, 10].astype(str).str.startswith("T"), df.iloc[:, 10], np.nan)
@@ -424,6 +425,176 @@ def process_operation_data(file_list_bytes):
     # Standardize (Matches OperationData Model)
     df_db = standardize_dataframe(df_db)
     return df_db, output, "Operation_Cleaned.xlsx"
+
+
+
+
+# ==========================================
+# 4. BAROW DATA CLEANER
+# ==========================================
+def process_ba_row_data(file_content):
+    try:
+        print("🔹 Starting BA Row Data Processing...")
+        
+        # 1. READ CSV
+        df = pd.read_csv(io.BytesIO(file_content), low_memory=False)
+        print(f"🔹 CSV Loaded. Columns: {list(df.columns[:5])}...")
+
+        df.columns = df.columns.str.strip()
+        print(f"🔹 CSV Loaded. Found Columns: {list(df.columns)}")
+
+        # 2. FILTER & TRANSFORM
+        if "Trip Id" in df.columns:
+            df["Trip Id"] = pd.to_numeric(df["Trip Id"], errors='coerce').fillna(0)
+            df = df[df["Trip Id"] != 0]
+
+        # Shift Time Logic
+        if "Trip Type" in df.columns:
+            df["Shift Time"] = df["Trip Type"].astype(str)
+            mask_log = df["Shift Time"].str.contains("LOGIN|LOGOUT", case=False, na=False)
+            df.loc[mask_log, "Shift Time"] = "00:00"
+        else:
+            df["Shift Time"] = "00:00"
+
+        # Trip Direction
+        if "Direction" in df.columns:
+            df["Trip Direction"] = df["Direction"].str.upper().map({
+                "LOGIN": "PICKUP", "LOGOUT": "DROP"
+            })
+        else:
+            df["Trip Direction"] = ""
+
+        # Safe Column Access for Pickup/Drop
+        df["Pickup Time"] = df.get("Duty Start", "")
+        df["Drop Time"] = df.get("Duty End", "")
+
+        # Registration Cleaning
+        if "Registration" in df.columns:
+            df["Registration"] = (
+                df["Registration"].astype(str)
+                .str.replace("-", "", regex=False)
+                .str.replace(" ", "", regex=False)
+                .str.upper()
+            )
+
+        # Location Logic
+        is_drop = df["Trip Direction"] == "DROP"
+        is_pickup = df["Trip Direction"] == "PICKUP"
+        
+        start_addr = df.get("Start Location Address", "")
+        end_addr = df.get("End Location Address", "")
+        start_land = df.get("Start Location Landmark", "")
+        end_land = df.get("End Location Landmark", "")
+
+        df["Airport Name"] = np.where(is_drop, start_addr, end_addr)
+        df["Address"] = np.where(is_pickup, start_addr, end_addr)
+        df["Landmark"] = np.where(is_pickup, start_land, end_land)
+
+        if "Leg Date" in df.columns:
+            # Standard case
+            df["Trip Date"] = df["Leg Date"].astype(str) + " " + df["Shift Time"].astype(str)
+        elif "Date" in df.columns:
+            # Fallback to 'Date' column
+            df["Trip Date"] = df["Date"].astype(str) + " " + df["Shift Time"].astype(str)
+        elif "Pickup Time" in df.columns:
+            # Fallback: Extract Date from Duty Start (e.g., '2026-01-01 18:00:00')
+            print("⚠️ 'Leg Date' missing. Extracting date from 'Pickup Time'.")
+            df["Temp_Date"] = pd.to_datetime(df["Pickup Time"], errors='coerce').dt.strftime('%d-%m-%Y')
+            df["Trip Date"] = df["Temp_Date"].astype(str) + " " + df["Shift Time"].astype(str)
+            df["Leg Date"] = df["Temp_Date"] # Fill Leg Date so it's not empty in DB
+        else:
+            # Worst case: No date found
+            print("❌ ERROR: Could not find 'Leg Date', 'Date', or 'Pickup Time'. Trip Date will be empty.")
+            df["Leg Date"] = ""
+            df["Trip Date"] = ""
+
+        if "Trip Date" in df.columns:
+            df["Shift Date"] = df["Trip Date"]
+        else:
+            df["Shift Date"] = ""
+
+        df["In App/ Extra"] = "BA Row Data"
+        df["BA REMARK"] = df.get("Trip Status", "")
+        df["MiS Remark"] = df.get("Comments", "")
+
+        # 3. PREPARE DATABASE MAPPING (Title Case -> snake_case)
+        DB_MAP = {
+            "Leg Date": "leg_date",
+            "Trip Id": "trip_id",
+            "Employee ID": "employee_id",
+            "Gender": "gender",
+            "EMP_CATEGORY": "emp_category",
+            "Employee Name": "employee_name",
+            "Shift Time": "shift_time",
+            "Pickup Time": "pickup_time",
+            "Drop Time": "drop_time",
+            "Trip Direction": "trip_direction",
+            "Registration": "cab_reg_no",
+            "Cab Type": "cab_type",
+            "Vendor": "vendor",
+            "Office": "office",
+            "Airport Name": "airport_name",
+            "Landmark": "landmark",
+            "Address": "address",
+            "Flight Number": "flight_number",
+            "Flight Category": "flight_category",
+            "Flight Route": "flight_route",
+            "Flight Type": "flight_type",
+            "Trip Date": "trip_date",
+            "MiS Remark": "mis_remark",
+            "In App/ Extra": "in_app_extra",
+            "Traveled Employee Count": "traveled_emp_count",
+            "UNA2": "una2",
+            "UNA": "una",
+            "BA REMARK": "ba_remark",
+            "Route Status": "route_status",
+            "Clubbing Status": "clubbing_status",
+            "GPS TIME": "gps_time",
+            "GPS REMARK": "gps_remark",
+            "Billing Zone Name": "billing_zone_name",
+            "Leg Type": "leg_type",
+            "Trip Source": "trip_source",
+            "Trip Type": "trip_type",
+            "Leg Start": "leg_start",
+            "Leg End": "leg_end",
+            "Audit Results": "audit_results",
+            "Audit Done By": "audit_done_by",
+            "Trip Audited": "trip_audited"
+        }
+
+        # 4. FIX: ENSURE ALL COLUMNS EXIST
+        # This loop prevents the KeyError by creating missing columns
+        for col in DB_MAP.keys():
+            if col not in df.columns:
+                df[col] = ""
+
+        # 5. SELECT AND RENAME
+        # Now it is safe to select because we guaranteed they exist
+        df_final = df[list(DB_MAP.keys())].copy()
+        df_final.rename(columns=DB_MAP, inplace=True)
+
+        print(f"🔹 Data Transformed. Renamed columns to: {list(df_final.columns[:5])}...")
+        print("🔹 Calling Standardizer...")
+
+        # 6. STANDARDIZE
+        if 'standardize_dataframe' in globals():
+            df_final = standardize_dataframe(df_final)
+            
+            if df_final is None:
+                print("❌ Standardization failed. Check if DB model matches these columns.")
+                return None, None, None
+        else:
+            print("⚠️ 'standardize_dataframe' function not found. Skipping.")
+
+        # 7. EXPORT
+        print("🔹 Generating Excel...")
+        return create_styled_excel(df_final, "BA_Row_Data_Cleaned")
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"❌ BA Row Data Cleaner Error: {e}")
+        return None, None, None
 # ==========================================
 # 4. Fastag Data Cleaner
 # ==========================================
