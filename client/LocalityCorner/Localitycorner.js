@@ -1,4 +1,4 @@
-const API_BASE = "http://127.0.0.1:8001/api";
+const API_BASE = "/api";
 let masterLocalities = [];
 let currentPage = 1;
 let totalPages = 1;
