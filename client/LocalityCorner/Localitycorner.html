@@ -1,17 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Locality Manager</title>
-    
-    <link rel="stylesheet" href="/shared-static/sidebar.css">
-    <script src="/shared-static/sidebar.js"></script>
+
+    <link rel="stylesheet" href="/components-static/sidebar.css">
+    <script src="/components-static/sidebar.js"></script>
 
     <link rel="stylesheet" href="/locality-static/Localitycorner.css">
-    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+
 <body>
 
     <div class="main-content">
@@ -36,10 +37,12 @@
 
         <div id="tab-view" class="tab-content active">
             <div class="table-controls">
-                <input type="text" id="viewSearch" placeholder="Filter Address..." onkeydown="if(event.key==='Enter') fetchTableData(1)">
-                <button class="btn-icon" onclick="fetchTableData(1)"><i class="fa-solid fa-magnifying-glass"></i></button>
+                <input type="text" id="viewSearch" placeholder="Filter Address..."
+                    onkeydown="if(event.key==='Enter') fetchTableData(1)">
+                <button class="btn-icon" onclick="fetchTableData(1)"><i
+                        class="fa-solid fa-magnifying-glass"></i></button>
             </div>
-            
+
             <div class="table-wrapper">
                 <table class="modern-table">
                     <thead>
@@ -54,7 +57,7 @@
                         </tr>
                     </thead>
                     <tbody id="viewTableBody">
-                        </tbody>
+                    </tbody>
                 </table>
             </div>
 
@@ -75,7 +78,7 @@
                 <div id="pendingCard" class="pending-card hidden">
                     <label>Address:</label>
                     <div class="highlight-box" id="pendingAddress">Loading...</div>
-                    
+
                     <div class="form-group">
                         <label>Select Locality</label>
                         <select id="singleLocalitySelect" onchange="updatePreview()">
@@ -90,7 +93,7 @@
 
                     <button class="btn-primary" onclick="saveSinglePending()">Save & Next ➡</button>
                 </div>
-                
+
                 <div id="noPendingMsg" class="success-state hidden">
                     <i class="fa-solid fa-check-circle"></i>
                     <h3>No pending items!</h3>
@@ -98,31 +101,59 @@
             </div>
 
             <div id="mode-bulk" class="mode-content hidden">
+
                 <div class="table-controls">
-                    <input type="text" id="bulkSearch" placeholder="Search pending..." onkeydown="if(event.key==='Enter') fetchBulkData(1)">
-                    <button class="btn-icon" onclick="fetchBulkData(1)"><i class="fa-solid fa-magnifying-glass"></i></button>
+                    <input type="text" id="bulkSearch" placeholder="Search pending..."
+                        onkeydown="if(event.key==='Enter') fetchBulkData(1)">
+                    <button class="btn-icon" onclick="fetchBulkData(1)"><i
+                            class="fa-solid fa-magnifying-glass"></i></button>
                 </div>
-                
+
                 <p class="record-count">Found <span id="bulkCount">0</span> records</p>
-                
+
                 <div class="table-wrapper small-height">
                     <table class="modern-table small-text">
                         <thead>
                             <tr>
-                                <th width="40"><input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulk()"></th>
+                                <th width="40"><input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulk()">
+                                </th>
                                 <th>Address</th>
                             </tr>
                         </thead>
                         <tbody id="bulkTableBody">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
 
-                <div class="bulk-action-area">
-                    <select id="bulkLocalitySelect">
-                        <option value="">-- Target Locality --</option>
-                    </select>
-                    <button class="btn-primary" onclick="saveBulk()">Update Selected</button>
+                <div class="bulk-action-area"
+                    style="display: flex !important; flex-direction: row !important; align-items: flex-end !important; gap: 15px !important; margin-top: 15px; background: #f4f4f4; padding: 15px; border-radius: 8px;">
+
+                    <div style="flex-grow: 1;">
+                        <label
+                            style="display:block; font-size: 12px; margin-bottom: 5px; font-weight: bold; color: #555;">Select
+                            Locality</label>
+                        <select id="bulkLocalitySelect" onchange="updateBulkPreview()"
+                            style="width: 180px; height: 40px; padding: 5px;">
+                            <option value="">-- Target Locality --</option>
+                        </select>
+                    </div>
+
+                    <div
+                        style="width: 1050px; background: white; padding: 5px 10px; border: 1px solid #ccc; border-radius: 4px; height: 40px; display: flex; flex-direction: column; justify-content: center;">
+                        <span style="font-size: 10px; color: #888;">Zone</span>
+                        <strong id="bulkPreviewZone" style="font-size: 14px; color: #333; line-height: 1;">-</strong>
+                    </div>
+
+                    <div
+                        style="width: 100px; background: white; padding: 5px 10px; border: 1px solid #ccc; border-radius: 4px; height: 40px; display: flex; flex-direction: column; justify-content: center;">
+                        <span style="font-size: 10px; color: #888;">KM</span>
+                        <strong id="bulkPreviewKM" style="font-size: 14px; color: #333; line-height: 1;">-</strong>
+                    </div>
+
+                    <button class="btn-primary" onclick="saveBulk()"
+                        style="height: 40px; margin: 0 !important; white-space: nowrap;">
+                        Update Selected
+                    </button>
                 </div>
             </div>
         </div>
@@ -154,4 +185,5 @@
 
     <script src="/locality-static/Localitycorner.js"></script>
 </body>
+
 </html>

@@ -6,6 +6,7 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(index=True, unique=True)
     password_hash: str
+    
 
 # --- 2. GPS CORNER DATA (Existing) ---
 class TripData(SQLModel, table=True):
@@ -199,52 +200,83 @@ class OperationData(SQLModel, table=True):
     gps_time: Optional[str] = None
     gps_remark: Optional[str] = None
 
-class t3_address_locality(SQLModel, table=True):
+class BARawTripData(SQLModel, table=True):
+    # Internal Database ID
     id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Composite Key (Trip ID + Employee ID)
+    unique_id: str = Field(index=True, unique=True)
+
+    # --- MANDATORY COLUMNS (Matches FINAL_DB_MAP) ---
+    shift_date: Optional[str] = None
+    trip_id: Optional[str] = None
+    employee_id: Optional[str] = None
+    gender: Optional[str] = None
+    emp_category: Optional[str] = None
+    employee_name: Optional[str] = None
+    shift_time: Optional[str] = None
+    pickup_time: Optional[str] = None
+    drop_time: Optional[str] = None
+    trip_direction: Optional[str] = None
+    cab_reg_no: Optional[str] = None
+    cab_type: Optional[str] = None
+    vendor: Optional[str] = None
+    office: Optional[str] = None
+    airport_name: Optional[str] = None
+    landmark: Optional[str] = None
     address: Optional[str] = None
-    locality: Optional[str] = None
+    flight_number: Optional[str] = None
+    flight_category: Optional[str] = None
+    flight_route: Optional[str] = None
+    flight_type: Optional[str] = None
+    trip_date: Optional[str] = None
+    mis_remark: Optional[str] = None
+    in_app_extra: Optional[str] = None
+    
+    # Special columns you requested
+    una: Optional[str] = None
+    unique_id: Optional[str] = None
+    
+    route_status: Optional[str] = None
+    clubbing_status: Optional[str] = None
+    gps_time: Optional[str] = None
+    gps_remark: Optional[str] = None
 
-class t3_locality_zone(SQLModel, table=True):
+
+
+# 1. Zone & KM Table (The Base)
+class T3ZoneKm(SQLModel, table=True):
+    __tablename__ = "t3_zone_km"
+    
+    # Zone must be the Primary Key to be referenced by others
+    zone: str = Field(primary_key=True) 
+    km: str  # e.g., "0-15"
+
+# 2. Locality & Zone Table (Links to Zone)
+class T3LocalityZone(SQLModel, table=True):
+    __tablename__ = "t3_locality_zone"
+    
+    # Locality must be Primary Key to be referenced by Address
+    locality: str = Field(primary_key=True)
+    
+    # Links to T3ZoneKm.zone
+    zone: Optional[str] = Field(default=None, foreign_key="t3_zone_km.zone")
+
+# 3. Address Table (Links to Locality)
+class T3AddressLocality(SQLModel, table=True):
+    __tablename__ = "t3_address_locality"
+    
+    # It is cleaner to use an integer ID as Primary Key
     id: Optional[int] = Field(default=None, primary_key=True)
-    locality: Optional[str] = None
-    zone: Optional[str] = None
-
-class t3_zone_km(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    zone: Optional[str] = None
-    km: Optional[str] = None
-
-
-
-class AITA75_35_address_locality(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    address: Optional[str] = None
-    locality: Optional[str] = None
-
-class AITA75_35_locality_zone(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    locality: Optional[str] = None
-    zone: Optional[str] = None
-
-class AITA75_35_zone_km(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    zone: Optional[str] = None
-    km: Optional[str] = None    
-
-class AITA_VATIKA_address_locality(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    address: Optional[str] = None
-    locality: Optional[str] = None
-
-class AITA_VATIKA_locality_zone(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    locality: Optional[str] = None
-    zone: Optional[str] = None
-
-class AITA_VATIKA_zone_km(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    zone: Optional[str] = None
-    km: Optional[str] = None    
+    
+    address: str = Field(index=True, unique=True)
+    
+    # Links to T3LocalityZone.locality
+    locality: Optional[str] = Field(default=None, foreign_key="t3_locality_zone.locality")
+    
+    # These should NOT be Foreign Keys. They are derived/cached data.
+    zone: Optional[str] = Field(default=None)
+    km: Optional[str] = Field(default=None)
 
 class vehicle_master(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
