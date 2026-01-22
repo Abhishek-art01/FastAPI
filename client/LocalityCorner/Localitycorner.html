@@ -101,37 +101,6 @@
             </div>
 
             <div id="mode-bulk" class="mode-content hidden">
-                <div class="table-controls">
-                    <input type="text" id="bulkSearch" placeholder="Search pending..."
-                        onkeydown="if(event.key==='Enter') fetchBulkData(1)">
-                    <button class="btn-icon" onclick="fetchBulkData(1)"><i
-                            class="fa-solid fa-magnifying-glass"></i></button>
-                </div>
-
-                <p class="record-count">Found <span id="bulkCount">0</span> records</p>
-
-                <div class="table-wrapper small-height">
-                    <table class="modern-table small-text">
-                        <thead>
-                            <tr>
-                                <th width="40"><input type="checkbox" id="bulkSelectAll" onchange="toggleAllBulk()">
-                                </th>
-                                <th>Address</th>
-                            </tr>
-                        </thead>
-                        <tbody id="bulkTableBody">
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="bulk-action-area">
-                    <select id="bulkLocalitySelect">
-                        <option value="">-- Target Locality --</option>
-                    </select>
-                    <button class="btn-primary" onclick="saveBulk()">Update Selected</button>
-                </div>
-            </div>
-            <div id="mode-bulk" class="mode-content hidden">
 
                 <div class="table-controls">
                     <input type="text" id="bulkSearch" placeholder="Search pending..."
@@ -156,41 +125,34 @@
                     </table>
                 </div>
 
-                <div class="bulk-action-area" style="
-                    display: flex; 
-                    align-items: center; 
-                    gap: 15px; 
-                    background: #f1f1f1; 
-                    padding: 15px; 
-                    border-radius: 8px; 
-                    margin-top: 15px;
-                    border: 1px solid #ddd;">
+                <div class="bulk-action-area"
+                    style="display: flex !important; flex-direction: row !important; align-items: flex-end !important; gap: 15px !important; margin-top: 15px; background: #f4f4f4; padding: 15px; border-radius: 8px;">
 
-                    <div style="flex: 2;">
+                    <div style="flex-grow: 1;">
                         <label
-                            style="font-size: 0.85rem; font-weight: bold; color: #555; display: block; margin-bottom: 4px;">Select
+                            style="display:block; font-size: 12px; margin-bottom: 5px; font-weight: bold; color: #555;">Select
                             Locality</label>
                         <select id="bulkLocalitySelect" onchange="updateBulkPreview()"
-                            style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;">
+                            style="width: 100%; height: 40px; padding: 5px;">
                             <option value="">-- Target Locality --</option>
                         </select>
                     </div>
 
                     <div
-                        style="flex: 1; background: white; padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc;">
-                        <span style="display: block; font-size: 0.75rem; color: #777;">Zone</span>
-                        <strong id="bulkPreviewZone" style="font-size: 1rem; color: #333;">-</strong>
+                        style="width: 150px; background: white; padding: 5px 10px; border: 1px solid #ccc; border-radius: 4px; height: 40px; display: flex; flex-direction: column; justify-content: center;">
+                        <span style="font-size: 10px; color: #888;">Zone</span>
+                        <strong id="bulkPreviewZone" style="font-size: 14px; color: #333; line-height: 1;">-</strong>
                     </div>
 
                     <div
-                        style="flex: 0.5; background: white; padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; min-width: 80px;">
-                        <span style="display: block; font-size: 0.75rem; color: #777;">KM</span>
-                        <strong id="bulkPreviewKM" style="font-size: 1rem; color: #333;">-</strong>
+                        style="width: 100px; background: white; padding: 5px 10px; border: 1px solid #ccc; border-radius: 4px; height: 40px; display: flex; flex-direction: column; justify-content: center;">
+                        <span style="font-size: 10px; color: #888;">KM</span>
+                        <strong id="bulkPreviewKM" style="font-size: 14px; color: #333; line-height: 1;">-</strong>
                     </div>
 
                     <button class="btn-primary" onclick="saveBulk()"
-                        style="height: 42px; margin-top: auto; padding: 0 20px;">
-                        Update
+                        style="height: 40px; margin: 0 !important; white-space: nowrap;">
+                        Update Selected
                     </button>
                 </div>
             </div>

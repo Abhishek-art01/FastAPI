@@ -325,14 +325,14 @@ async function postData(endpoint, body) {
         return data.success;
     } catch (e) { alert("Network Error"); return false; }
 }
-// Add this function anywhere in your JS file
+
 function updateBulkPreview() {
     const locName = document.getElementById('bulkLocalitySelect').value;
     const loc = masterLocalities.find(l => l.locality === locName);
 
     if (loc) {
         document.getElementById('bulkPreviewZone').textContent = loc.zone || "-";
-        // Check both 'km' (new backend) and 'billing_km' (legacy/dropdown backend)
+        // Handles both new backend format (.km) and old format (.billing_km)
         document.getElementById('bulkPreviewKM').textContent = loc.km || loc.billing_km || "-";
     } else {
         document.getElementById('bulkPreviewZone').textContent = "-";
