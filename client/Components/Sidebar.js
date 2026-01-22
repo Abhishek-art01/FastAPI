@@ -13,8 +13,8 @@ document.addEventListener("DOMContentLoaded", function () {
             <a href="/cleaner" class="nav-item">🚚 Cleaner</a>
             <a href="/gps-corner" class="nav-item">🛰️ GPS Corner</a>
             <a href="/locality-manager" class="nav-item">🏙️ Locality Manager</a>
-            <a href="/operation-manager" class="nav-item">🏙️ Downloads</a>
-            <a href="/admin" class="nav-item">🏙️ Admin</a>
+            <a href="/operation-manager" class="nav-item">⬇️ Downloads</a>
+            <a href="/admin" class="nav-item">🔧 Admin</a>
             <a href="/logout" class="nav-item" style="color:red; margin-top: auto;">🚪 Logout</a>
         </nav>
     </div>
@@ -46,6 +46,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // 4. Highlight Active Link
     const currentPath = window.location.pathname;
     document.querySelectorAll('.nav-item').forEach(link => {
+        // Simple check to highlight active button
         if (link.getAttribute('href') === currentPath) {
             link.classList.add('active');
         }
