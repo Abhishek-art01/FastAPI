@@ -693,15 +693,31 @@ def _process_icici(pdf_obj):
     df.rename(columns=col_map, inplace=True)
     return df
 
-import pdfplumber
-import pandas as pd
-import io
-import re
-import numpy as np
 
 # ==========================================
 # HELPER: CLEANING UTILS
 # ==========================================
+# ==========================================
+# HELPER: CLEANING UTILS (Fixed)
+# ==========================================
+def clean_multiline_cells(df):
+    """
+    Fixes cells where text is split across lines (e.g. 'New\nDelhi' -> 'New Delhi').
+    Collapses multiple spaces into one.
+    """
+    for col in df.columns:
+        # Only clean string (object) columns
+        if df[col].dtype == object:
+            df[col] = (
+                df[col].astype(str)
+                .str.replace(r"[\n\t]", " ", regex=True) # Replace newline/tab with space
+                .str.replace(r"\s+", " ", regex=True)    # Merge multiple spaces
+                .str.strip()                             # Trim edges
+            )
+            # Restore true NaNs if we created "nan" strings
+            df[col] = df[col].replace(["nan", "None", ""], np.nan)
+    return df
+
 def _clean_columns(columns):
     """Standardizes column names to snake_case (User's Logic)"""
     cleaned = (
@@ -837,6 +853,9 @@ def _process_icici(pdf_obj):
     if "plaza_name" in df.columns:
         df = df[df["plaza_name"].astype(str).str.contains("transaction description", case=False, na=False) == False]
 
+    df = clean_multiline_cells(df)
+
+
     # Map to Title Case for Final Output consistency
     final_title_map = {
         "vehicle_number": "Vehicle No",
@@ -853,9 +872,6 @@ def _process_icici(pdf_obj):
 
 # ==========================================
 # HELPER: IDFC SPECIFIC CLEANER (YOUR PREVIOUS PERFECT CODE)
-# ==========================================
-# ==========================================
-# HELPER: CLEANING UTILS (From your logic)
 # ==========================================
 def _clean_columns(columns):
     """Standardizes column names to snake_case"""
@@ -1027,6 +1043,9 @@ def _process_idfc(pdf_obj):
         df["activity"] = df["activity"].astype(str).str.strip()
         df = df[~df["activity"].str.lower().isin(["recharge", "", "nan", "none"])]
 
+    df = clean_multiline_cells(df)
+
+
     # ----------------------------------------------------------------------
     # 🔥 FIX: SMART COLUMN MAPPING (CATCHES PLAZA NAME & ID)
     # ----------------------------------------------------------------------
@@ -1060,6 +1079,125 @@ def _process_idfc(pdf_obj):
     df.rename(columns=final_map, inplace=True)
 
     return df
+
+# ==========================================
+# HELPER: IDFCB SPECIFIC CLEANER (Variable Method)
+# ==========================================
+def _process_idfcb(pdf_obj):
+    """
+    Cleaner for 'IDFCB' variant.
+    Extracts Vehicle No into a variable and applies it to the final dataframe.
+    """
+    all_tables = []
+    for page in pdf_obj.pages:
+        tables = page.extract_tables()
+        for table in tables:
+            if table:
+                all_tables.append(pd.DataFrame(table))
+    
+    if not all_tables: 
+        return pd.DataFrame()
+
+    df = pd.concat(all_tables, ignore_index=True)
+
+    # 1. REMOVE EMPTY ROWS
+    df = df.dropna(how="all").reset_index(drop=True)
+
+    # 2. EXTRACT VEHICLE NUMBER (Save to variable)
+    # We grab it from (Row 1, Col 3) before doing any drops
+    vehicle_val = ""
+    try:
+        if df.shape[0] > 1 and df.shape[1] > 3:
+            raw_val = str(df.iat[1, 3])
+            if raw_val and raw_val.lower() != 'nan':
+                vehicle_val = raw_val.replace("\n", "").replace(" ", "").strip()
+                print(f"   ✅ IDFCB Vehicle Found: {vehicle_val}")
+    except Exception as e:
+        print(f"   ⚠️ IDFCB Vehicle Extraction Failed: {e}")
+
+    # 3. DROP HEADER JUNK (Rows 0-4)
+    if len(df) > 5:
+        df = df.drop(index=[0,1,2,3,4]).reset_index(drop=True)
+    else:
+        return pd.DataFrame()
+
+    # 4. SET HEADER (Row 0 is now the header)
+    df.columns = df.iloc[0]
+    df = df[1:].reset_index(drop=True) # Remove header row from data
+
+    # 5. CLEAN COLUMNS
+    df.columns = _clean_columns(df.columns) 
+    
+    # 6. RENAME COLUMNS (Snake Case)
+    rename_map = {
+        "reader_date_time": "travel_date_time",
+        "debit": "tag_debit_credit",
+        "activity": "activity",
+        "description": "plaza_name", 
+        "transaction_description": "plaza_name",
+        "sequence_no": "unique_transaction_id", 
+        "urn": "unique_transaction_id" 
+    }
+    
+    final_rename = {}
+    for col in df.columns:
+        for k, v in rename_map.items():
+            if k in col.lower():
+                final_rename[col] = v
+    df.rename(columns=final_rename, inplace=True)
+
+    # 7. STANDARDIZE VALUES
+    cols_to_clean = [c for c in df.columns if "amount" in c or "balance" in c or "debit" in c]
+    for c in cols_to_clean:
+        df[c] = df[c].astype(str).str.replace("Dr", "", regex=False)\
+                                 .str.replace("Cr", "", regex=False)\
+                                 .str.replace(",", "", regex=False)\
+                                 .str.strip() 
+
+    # 8. FILTER JUNK
+    if "activity" in df.columns:
+        # Normalize text first
+        df["activity"] = df["activity"].astype(str).str.strip()
+        
+        # Create a lowercase version for checking
+        act_lower = df["activity"].str.lower()
+        
+        # Filter Logic:
+        # 1. Contains "recharge" (covers UPI, BBPS, CCAVENUE, etc.)
+        # 2. Contains "rec harge" (covers the broken PDF text you saw)
+        # 3. Exact matches for "none" or "nan"
+        mask_junk = (
+            act_lower.str.contains("recharge", na=False) | 
+            act_lower.str.contains("ccavenue", na=False) | 
+            act_lower.str.contains("rec harge", na=False) |
+            act_lower.isin(["none", "nan", ""])
+        )
+        
+        # Keep rows that are NOT junk
+        df = df[~mask_junk]
+
+    df = clean_multiline_cells(df)
+
+
+    # 9. FINAL RENAME TO TITLE CASE (For Main Processor)
+    final_title_map = {
+        "travel_date_time": "Travel Date Time",
+        "unique_transaction_id": "Unique Transaction ID",
+        "plaza_name": "Plaza Name",
+        "plaza_id": "Plaza ID",
+        "activity": "Activity",
+        "tag_debit_credit": "Tag Dr/Cr"
+    }
+    df.rename(columns=final_title_map, inplace=True)
+
+    # 10. ASSIGN VEHICLE NUMBER (The Fix)
+    # We assign it here to the final column name directly.
+    # This guarantees the column exists and is filled.
+    df["Vehicle No"] = vehicle_val
+    df = df[df.isna().sum(axis=1) <= 2]
+
+
+    return df
 # ==========================================
 # 4. MAIN FASTAG DATA CLEANER (PDF)
 # ==========================================
@@ -1087,9 +1225,13 @@ def process_fastag_data(file_data_list):
                         print(f"🔹 File '{filename}' -> Detected ICICI Logic")
                         df_temp = _process_icici(pdf)
                     
+                    elif "idfcb.pdf" in fname_lower:
+                        print(f"🔹 File '{filename}' -> Detected IDFCB Logic")
+                        df_temp = _process_idfcb(pdf)
+                    
                     else:
                         print(f"⚠️ File '{filename}' -> No Bank Name found. Defaulting to ICICI.")
-                        df_temp = _process_icici(pdf)
+                    
 
                     if df_temp is not None and not df_temp.empty:
                         processed_dfs.append(df_temp)
