@@ -1198,6 +1198,150 @@ def _process_idfcb(pdf_obj):
 
 
     return df
+
+# ==========================================
+# HELPER: INDUS SPECIFIC CLEANER (New)
+# ==========================================
+def _process_indus(pdf_obj):
+    """
+    Cleaner for 'INDUS' variant.
+    Handles split rows for AM/PM dates and multi-line plaza names.
+    """
+    all_tables = []
+    for page in pdf_obj.pages:
+        tables = page.extract_tables()
+        for table in tables:
+            if table:
+                all_tables.append(pd.DataFrame(table))
+    
+    if not all_tables: 
+        return pd.DataFrame()
+
+    df = pd.concat(all_tables, ignore_index=True)
+
+    # 1. Remove fully empty rows
+    df = df.dropna(how="all")
+
+    # 2. Set Header (Row 0)
+    df.columns = df.iloc[0]
+    df = df[1:].reset_index(drop=True)
+
+    # 3. Clean Column Names
+    def clean_columns(columns):
+        return (
+            columns.astype(str)
+            .str.replace(r"\n", " ", regex=True)
+            .str.replace(r"\t", " ", regex=True)
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+            .str.lower()
+            .str.replace(r"[^\w\s]", "", regex=True)
+            .str.replace(" ", "_")
+        )
+
+    df.columns = clean_columns(df.columns)
+    df.columns = df.columns.str.strip().str.lower()
+
+    # 4. Rename Columns
+    rename_map = {
+        "transaction_datetime": "travel_date_time",
+        "transactiondtstamp": "unique_transaction_id",
+        "type": "activity",
+        "description": "plaza_name",
+        "debit": "tag_debit_credit",
+        "vehiclenumber": "vehicle_number",
+    }
+    df = df.rename(columns=rename_map)
+
+    # 5. Drop Unwanted Columns
+    df = df.drop(columns=["credit", "balance"], errors="ignore")
+
+    # 6. Add Missing Columns
+    if "plaza_id" not in df.columns:
+        df["plaza_id"] = ""
+
+    # 7. Select Final Columns
+    final_cols = [
+        "vehicle_number", "travel_date_time", "unique_transaction_id",
+        "plaza_name", "plaza_id", "activity", "tag_debit_credit"
+    ]
+    # Keep only what exists for now
+    df = df[[c for c in final_cols if c in df.columns]]
+
+    # 8. Filter Junk
+    if "activity" in df.columns:
+        df["activity"] = df["activity"].astype(str).str.strip()
+        df = df[~df["activity"].str.lower().isin(["recharge", "type", "none", "nan"])]
+
+    # 9. ROW MERGING LOGIC (Your Core Logic)
+    df = df.replace(r"^\s*$", np.nan, regex=True)
+    df = df.reset_index(drop=True)
+
+    # A) Merge AM/PM split rows
+    if "travel_date_time" in df.columns:
+        for i in range(1, len(df)):
+            val = str(df.at[i, "travel_date_time"]) if pd.notna(df.at[i, "travel_date_time"]) else ""
+            if val.lower() in ["am", "pm"]:
+                # Append to previous row
+                prev_val = str(df.at[i - 1, "travel_date_time"]) if pd.notna(df.at[i - 1, "travel_date_time"]) else ""
+                df.at[i - 1, "travel_date_time"] = (prev_val + " " + val).strip()
+                # Clear current row
+                df.at[i, "travel_date_time"] = np.nan
+
+    # B) Merge Split Plaza Names
+    important_cols = ["vehicle_number", "travel_date_time", "unique_transaction_id", "activity", "tag_debit_credit"]
+    existing_important = [c for c in important_cols if c in df.columns]
+    
+    if "plaza_name" in df.columns and existing_important:
+        for i in range(1, len(df)):
+            # If current row has plaza name but other important cols are empty -> it's a spillover
+            if pd.notna(df.at[i, "plaza_name"]) and df.loc[i, existing_important].isna().all():
+                # Merge upward
+                prev_plaza = str(df.at[i - 1, "plaza_name"]) if pd.notna(df.at[i - 1, "plaza_name"]) else ""
+                curr_plaza = str(df.at[i, "plaza_name"])
+                df.at[i - 1, "plaza_name"] = (prev_plaza + " " + curr_plaza).strip()
+                df.at[i, "plaza_name"] = np.nan
+
+    # 10. Final Cleanup
+    df = df.dropna(how="all").reset_index(drop=True)
+
+    # 11. Format Date
+    if "travel_date_time" in df.columns:
+        df["travel_date_time"] = (
+            df["travel_date_time"]
+            .astype(str)
+            .str.replace(r"\s*\n\s*", " ", regex=True)
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+        )
+        # Convert to datetime string format for consistency
+        # We don't convert to object here, we keep it string until final export
+        # But let's standardize format if possible
+        df["travel_date_time"] = pd.to_datetime(df["travel_date_time"], dayfirst=True, errors="coerce")
+
+    # 12. Format Plaza Name
+    if "plaza_name" in df.columns:
+        df["plaza_name"] = (
+            df["plaza_name"]
+            .astype(str)
+            .str.replace(r"\s*\n\s*", " ", regex=True)
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+        )
+
+    # 13. Rename to Title Case (For Main Processor)
+    final_title_map = {
+        "vehicle_number": "Vehicle No",
+        "travel_date_time": "Travel Date Time",
+        "unique_transaction_id": "Unique Transaction ID",
+        "plaza_name": "Plaza Name",
+        "plaza_id": "Plaza ID",
+        "activity": "Activity",
+        "tag_debit_credit": "Tag Dr/Cr"
+    }
+    df.rename(columns=final_title_map, inplace=True)
+
+    return df
 # ==========================================
 # 4. MAIN FASTAG DATA CLEANER (PDF)
 # ==========================================
@@ -1228,6 +1372,10 @@ def process_fastag_data(file_data_list):
                     elif "idfcb.pdf" in fname_lower:
                         print(f"🔹 File '{filename}' -> Detected IDFCB Logic")
                         df_temp = _process_idfcb(pdf)
+                    
+                    elif "indus.pdf" in fname_lower:
+                        print(f"🔹 File '{filename}' -> Detected INDUS Logic")
+                        df_temp = _process_indus(pdf)
                     
                     else:
                         print(f"⚠️ File '{filename}' -> No Bank Name found. Defaulting to ICICI.")
