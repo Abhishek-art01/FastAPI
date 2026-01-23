@@ -6,6 +6,8 @@ import re
 import xlrd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+import traceback
+
 
 # ==========================================
 # 0. CONFIGURATION & GLOBAL HELPERS
@@ -184,18 +186,23 @@ def process_client_data(file_content):
         return None, None, None
 
 
+ # Added for debugging
+
 # ==========================================
 # 2. RAW DATA CLEANER
 # ==========================================
-def clean_single_raw_df(df):
+def _clean_single_raw_df(df):
     try:
+
+        df = df.replace({np.nan: None, "nan": None})
         # Trip ID Logic
         df["Trip_ID"] = np.where(df.iloc[:, 10].astype(str).str.startswith("T"), df.iloc[:, 10], np.nan)
         df["Trip_ID"] = df["Trip_ID"].ffill()
 
         # Identify Row Types
         is_header = df.iloc[:, 1].astype(str).str.contains("UNITED FACILITIES", na=False)
-        is_passenger = df.iloc[:, 0].astype(str).str.match(r"^[1-5]$")
+        # DEBUG: Relaxed regex slightly to ensure we catch rows even if there are formatting oddities
+        is_passenger = df.iloc[:, 0].astype(str).str.match(r"^[0-9]+$") 
 
         # Extraction Maps
         h_map = {0: 'TRIP_DATE', 1: 'AGENCY_NAME', 2: 'D_LOGIN', 3: 'VEHICLE_NO', 4: 'DRIVER_NAME', 6: 'DRIVER_MOBILE', 7: 'MARSHALL', 8: 'DISTANCE', 9: 'EMP_COUNT', 10: 'TRIP_COUNT'}
@@ -204,6 +211,10 @@ def clean_single_raw_df(df):
         df_h = df[is_header].rename(columns=h_map)
         df_p = df[is_passenger].rename(columns=p_map)
         
+        # DEBUG CHECK
+        if df_h.empty or df_p.empty:
+            print("DEBUG: Header or Passenger dataframe is empty. Check regex or file format.")
+
         cols_h = [c for c in h_map.values() if c in df_h.columns] + ['Trip_ID']
         cols_p = [c for c in p_map.values() if c in df_p.columns] + ['Trip_ID']
         
@@ -234,18 +245,33 @@ def clean_single_raw_df(df):
             merged[col] = merged[col].astype(str).str.upper().str.strip()
 
         return merged
-    except: return pd.DataFrame()
+    except Exception as e:
+        # DEBUG: Print actual error
+        print(f"Error in _clean_single_raw_df: {e}")
+        traceback.print_exc()
+        return pd.DataFrame()
 
 def process_raw_data(file_list_bytes):
     all_dfs = []
-    for _, content in file_list_bytes:
+    for filename, content in file_list_bytes: # Added filename to loop for better debug
         try:
-            df_raw = pd.read_excel(io.BytesIO(content), header=None).dropna(how="all").reset_index(drop=True)
+            print(f"Processing file: {filename}") # DEBUG
+            df_raw = pd.read_excel(io.BytesIO(content), header=None,dtype=str).dropna(how="all").reset_index(drop=True)
             cleaned = _clean_single_raw_df(df_raw)
-            if not cleaned.empty: all_dfs.append(cleaned)
-        except: pass
+            if not cleaned.empty: 
+                all_dfs.append(cleaned)
+            else:
+                print(f"Warning: File {filename} resulted in empty data.")
+        except Exception as e:
+            # DEBUG: Print actual error
+            print(f"FAILED processing file {filename}: {e}")
+            traceback.print_exc()
+            pass
 
-    if not all_dfs: return None, None, None
+    if not all_dfs: 
+        print("No valid dataframes found in any files.")
+        return None, None, None
+        
     final_df = pd.concat(all_dfs, ignore_index=True)
 
     # Input Map -> DB Columns
@@ -269,12 +295,24 @@ def process_raw_data(file_list_bytes):
         final_db['shift_time'] = pd.to_datetime(final_db['shift_time'], errors='coerce', format='mixed').dt.strftime('%H:%M')
 
     # 3. Standardize (Matches RawTripData Model)
-    final_db = standardize_dataframe(final_db)
+    # DEBUG: Wrapped in try/except in case this function is missing or failing
+    try:
+        final_db = standardize_dataframe(final_db)
+    except NameError:
+        print("CRITICAL: 'standardize_dataframe' function is not defined.")
+    except Exception as e:
+        print(f"Error in standardize_dataframe: {e}")
+        traceback.print_exc()
+        return None, None, None
+
     if final_db is None: return None, None, None
 
-    return create_styled_excel(final_db, "Raw_Cleaned")
-
-
+    # DEBUG: Wrapped in try/except
+    try:
+        return create_styled_excel(final_db, "Raw_Cleaned")
+    except NameError:
+        print("CRITICAL: 'create_styled_excel' function is not defined.")
+        return final_db, None, None
 # ==========================================
 # 3. OPERATION DATA CLEANER
 # ==========================================
@@ -596,18 +634,11 @@ def process_ba_row_data(file_content):
         traceback.print_exc()
         print(f"❌ BA Row Data Cleaner Error: {e}")
         return None, None, None
-import pdfplumber
-import pandas as pd
-import io
-import re
+
 
 # ==========================================
 # 4. FASTAG DATA CLEANER (PDF) - MULTI FILE
 # ==========================================
-import pdfplumber
-import pandas as pd
-import io
-import re
 
 # ==========================================
 # HELPER: ICICI SPECIFIC CLEANER
@@ -1048,11 +1079,11 @@ def process_fastag_data(file_data_list):
                 with pdfplumber.open(io.BytesIO(content)) as pdf:
                     df_temp = None
                     
-                    if "idfc" in fname_lower:
+                    if "idfc.pdf" in fname_lower:
                         print(f"🔹 File '{filename}' -> Detected IDFC Logic")
                         df_temp = _process_idfc(pdf)
                     
-                    elif "icici" in fname_lower:
+                    elif "icici.pdf" in fname_lower:
                         print(f"🔹 File '{filename}' -> Detected ICICI Logic")
                         df_temp = _process_icici(pdf)
                     

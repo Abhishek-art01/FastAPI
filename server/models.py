@@ -200,49 +200,7 @@ class OperationData(SQLModel, table=True):
     gps_time: Optional[str] = None
     gps_remark: Optional[str] = None
 
-class BARawTripData(SQLModel, table=True):
-    # Internal Database ID
-    id: Optional[int] = Field(default=None, primary_key=True)
-    
-    # Composite Key (Trip ID + Employee ID)
-    unique_id: str = Field(index=True, unique=True)
 
-    # --- MANDATORY COLUMNS (Matches FINAL_DB_MAP) ---
-    shift_date: Optional[str] = None
-    trip_id: Optional[str] = None
-    employee_id: Optional[str] = None
-    gender: Optional[str] = None
-    emp_category: Optional[str] = None
-    employee_name: Optional[str] = None
-    shift_time: Optional[str] = None
-    pickup_time: Optional[str] = None
-    drop_time: Optional[str] = None
-    trip_direction: Optional[str] = None
-    cab_reg_no: Optional[str] = None
-    cab_type: Optional[str] = None
-    vendor: Optional[str] = None
-    office: Optional[str] = None
-    airport_name: Optional[str] = None
-    landmark: Optional[str] = None
-    address: Optional[str] = None
-    flight_number: Optional[str] = None
-    flight_category: Optional[str] = None
-    flight_route: Optional[str] = None
-    flight_type: Optional[str] = None
-    trip_date: Optional[str] = None
-    mis_remark: Optional[str] = None
-    in_app_extra: Optional[str] = None
-    
-    # Special columns you requested
-    una: Optional[str] = None
-    unique_id: Optional[str] = None
-    
-    route_status: Optional[str] = None
-    clubbing_status: Optional[str] = None
-    gps_time: Optional[str] = None
-    gps_remark: Optional[str] = None
-
-# server/models.py (Add to bottom)
 
 class BARowData(SQLModel, table=True):
     __tablename__ = "ba_row_data"
