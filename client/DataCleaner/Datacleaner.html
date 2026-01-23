@@ -29,11 +29,12 @@
                     <option value="raw">Raw Data (App)</option>
                     <option value="operation">Operation Data (Multiple .xls)</option>
                     <option value="ba_row">BA Row Data (Single .csv)</option>
+                    <option value="fastag">Fastag Data (PDF)</option>
                 </select>
             </div>
 
             <div class="upload-area" id="drop-zone">
-                <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" multiple hidden>
+                <input type="file" id="fileInput" accept=".xlsx, .xls, .csv, .pdf" multiple hidden>
                 <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
                 <p>Drag & Drop file(s)</p>
                 <button class="btn-select" onclick="document.getElementById('fileInput').click()">Browse Files</button>

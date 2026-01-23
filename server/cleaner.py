@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import pdfplumber
 import io
 import re
 import xlrd
@@ -595,20 +596,523 @@ def process_ba_row_data(file_content):
         traceback.print_exc()
         print(f"❌ BA Row Data Cleaner Error: {e}")
         return None, None, None
+import pdfplumber
+import pandas as pd
+import io
+import re
+
 # ==========================================
-# 4. Fastag Data Cleaner
+# 4. FASTAG DATA CLEANER (PDF) - MULTI FILE
 # ==========================================
-def process_fastag_data(df: pd.DataFrame) -> pd.DataFrame:
+import pdfplumber
+import pandas as pd
+import io
+import re
+
+# ==========================================
+# HELPER: ICICI SPECIFIC CLEANER
+# ==========================================
+def _process_icici(pdf_obj):
+    all_rows = []
+    for page in pdf_obj.pages:
+        tables = page.extract_tables()
+        for table in tables:
+            if table:
+                all_rows.extend(table)
+    
+    if not all_rows: return pd.DataFrame()
+
+    df = pd.DataFrame(all_rows)
+
+    # 1. Find Header (Look for "Date & Time" or "Transaction Description")
+    header_idx = -1
+    for i in range(min(20, len(df))):
+        row_str = " ".join([str(x).lower() for x in df.iloc[i] if x])
+        if "date" in row_str and "description" in row_str:
+            header_idx = i
+            break
+    
+    if header_idx == -1: return pd.DataFrame()
+
+    # 2. Set Header & Remove Empty Columns
+    df.columns = df.iloc[header_idx]
+    df = df.iloc[header_idx+1:].reset_index(drop=True)
+    df.columns = [str(c).replace("\n", " ").strip() for c in df.columns]
+    df = df.loc[:, df.columns != 'nan'] # Remove empty columns
+    
+    # 3. Rename to User's Desired Format
+    col_map = {}
+    for col in df.columns:
+        c_low = col.lower()
+        if "unique" in c_low and "id" in c_low:
+            col_map[col] = "Unique Transaction ID"
+        elif "date" in c_low:
+            col_map[col] = "Travel Date Time"
+        elif "activity" in c_low:
+            col_map[col] = "Activity"
+        elif "description" in c_low: 
+            col_map[col] = "Plaza Name"  # User requested this mapping for ICICI
+        elif "vehicle" in c_low:
+            col_map[col] = "Vehicle No"
+        elif "amount" in c_low and "dr" in c_low:
+            col_map[col] = "Tag Dr/Cr"
+        elif "plaza" in c_low and "id" in c_low:
+            col_map[col] = "Plaza ID"
+
+    df.rename(columns=col_map, inplace=True)
+    return df
+
+import pdfplumber
+import pandas as pd
+import io
+import re
+import numpy as np
+
+# ==========================================
+# HELPER: CLEANING UTILS
+# ==========================================
+def _clean_columns(columns):
+    """Standardizes column names to snake_case (User's Logic)"""
+    cleaned = (
+        columns
+        .astype(str)
+        .str.replace(r"\n", " ", regex=True)        # remove line breaks
+        .str.replace(r"\t", " ", regex=True)        # remove tabs
+        .str.replace(r"\s+", " ", regex=True)       # normalize spaces
+        .str.strip()                                # trim edges
+        .str.lower()                                # lowercase
+        .str.replace(r"[^\w\s]", "", regex=True)    # remove special chars
+        .str.replace(" ", "_")                      # snake_case
+    )
+    return cleaned
+
+def _clean_cell_value(x):
+    """Normalizes spaces and handles None/NaN"""
+    if isinstance(x, str):
+        x = x.replace("\n", " ").replace("\t", " ")
+        x = re.sub(r"\s+", " ", x).strip()
+        if x.lower() in ["na", "n/a", "null", "none", ""]:
+            return np.nan
+        return x
+    return x
+
+# ==========================================
+# HELPER: ICICI SPECIFIC CLEANER (YOUR PERFECT CODE)
+# ==========================================
+def _process_icici(pdf_obj):
+    all_tables = []
+    
+    # 1. Extract Tables
+    for page in pdf_obj.pages:
+        tables = page.extract_tables()
+        for table in tables:
+            if table:
+                all_tables.append(pd.DataFrame(table))
+    
+    if not all_tables: return pd.DataFrame()
+
+    # 2. Merge
+    df = pd.concat(all_tables, ignore_index=True)
+
+    # 3. Hardcoded Drop (0-11) as requested
+    # We check length first to avoid errors on empty files
+    if len(df) > 12:
+        df = df.drop(index=[0,1,2,3,4,5,6,7,8,9,10,11]).reset_index(drop=True)
+    else:
+        return pd.DataFrame()
+
+    # 4. Set Header
+    df.columns = df.iloc[0]
+    df = df[1:].reset_index(drop=True) # Remove header row from data
+
+    # 5. Clean Columns
+    df.columns = _clean_columns(df.columns)
+    df.columns = df.columns.str.strip()
+    
+    # Specific rename from your script
+    df = df.rename(columns={"date__time": "date_time"})
+
+    # 6. Extract Vehicle Number
+    # Logic: First row, date_time column, split by space
+    if not df.empty and "date_time" in df.columns:
+        try:
+            raw_val = str(df.loc[0, "date_time"])
+            vehicle_no = raw_val.split(" ")[0]
+            df["vehicle_no"] = vehicle_no
+            
+            # Remove that row used for extraction
+            df = df.drop(index=[0]).reset_index(drop=True)
+        except:
+            df["vehicle_no"] = ""
+    else:
+        df["vehicle_no"] = ""
+
+    # 7. Add Plaza ID placeholder
+    df["plaza_id"] = ""
+
+    # 8. Standardize Column Names (Replacements)
+    replacements = {
+        "drcr": "debit_credit",
+        "rscr": "rupees_credit",
+        "rsdr": "rupees_debit",
+        "rs": "rupees",
+        "amt": "amount",
+        "bal": "balance"
+    }
+    for k, v in replacements.items():
+        df.columns = df.columns.str.replace(k, v, regex=False)
+
+    # 9. Drop unwanted columns
+    df = df.drop(columns=["nan", "amount_rupees_credit"], errors="ignore")
+
+    # 10. Final Rename Map
+    rename_map = {
+        "transaction_description": "plaza_name",
+        "date_time": "travel_date_time",
+        "vehicle_no": "vehicle_number",
+        "amount_rupees_debit": "tag_debit_credit"
+    }
+    df = df.rename(columns=rename_map)
+
+    # 11. Drop Empty Rows based on critical columns
+    subset_cols = [
+        "vehicle_number", "travel_date_time", "unique_transaction_id",
+        "plaza_name", "activity", "tag_debit_credit"
+    ]
+    # Only drop if columns exist
+    existing_subset = [c for c in subset_cols if c in df.columns]
+    if existing_subset:
+        df = df.dropna(subset=existing_subset)
+
+    # 12. Final Column Selection
+    final_columns = [
+        "vehicle_number",
+        "travel_date_time",
+        "unique_transaction_id",
+        "plaza_name",
+        "plaza_id",
+        "activity",
+        "tag_debit_credit"
+    ]
+    
+    # Add missing columns if any
+    for col in final_columns:
+        if col not in df.columns:
+            df[col] = ""
+
+    df = df[final_columns]
+
+    # 13. Filter out repeated headers
+    if "plaza_name" in df.columns:
+        df = df[df["plaza_name"].astype(str).str.contains("transaction description", case=False, na=False) == False]
+
+    # Map to Title Case for Final Output consistency
+    final_title_map = {
+        "vehicle_number": "Vehicle No",
+        "travel_date_time": "Travel Date Time",
+        "unique_transaction_id": "Unique Transaction ID",
+        "plaza_name": "Plaza Name",
+        "plaza_id": "Plaza ID",
+        "activity": "Activity",
+        "tag_debit_credit": "Tag Dr/Cr"
+    }
+    df.rename(columns=final_title_map, inplace=True)
+
+    return df
+
+# ==========================================
+# HELPER: IDFC SPECIFIC CLEANER (YOUR PREVIOUS PERFECT CODE)
+# ==========================================
+# ==========================================
+# HELPER: CLEANING UTILS (From your logic)
+# ==========================================
+def _clean_columns(columns):
+    """Standardizes column names to snake_case"""
+    cleaned = (
+        columns
+        .astype(str)
+        .str.replace(r"\n", " ", regex=True)
+        .str.replace(r"\t", " ", regex=True)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+        .str.lower()
+        .str.replace(r"[^\w\s]", "", regex=True)
+        .str.replace(" ", "_")
+    )
+    return cleaned
+
+def _clean_cell_value(x):
+    """Normalizes spaces and handles None/NaN"""
+    if isinstance(x, str):
+        x = x.replace("\n", " ").replace("\t", " ")
+        x = re.sub(r"\s+", " ", x).strip()
+        if x.lower() in ["na", "n/a", "null", "none", ""]:
+            return np.nan
+        return x
+    return x
+
+def _clean_datetime(x):
+    """Fixes broken years (2 025) and time spacing"""
+    if not isinstance(x, str):
+        return x
+    x = re.sub(r"\s+", " ", x).strip()
+    # Fix broken year (2 025 -> 2025)
+    x = re.sub(r"(\d{2})-(\d)\s(\d{3})", r"\1-\2\3", x)
+    # Fix time spacing (23:3 2:46 -> 23:32:46)
+    x = re.sub(r"(\d{2}):(\d)\s(\d):(\d{2})", r"\1:\2\3:\4", x)
+    return x
+
+def _clean_reference_id(x):
+    if not isinstance(x, str):
+        return x
+    return x.replace(" ", "")
+
+def _clean_vehicle_no(x):
+    if isinstance(x, str):
+        return x.replace(" ", "").strip()
+    return x
+
+# ==========================================
+# HELPER: IDFC SPECIFIC CLEANER
+# ==========================================
+def _process_idfc(pdf_obj):
+    all_tables = []
+    for page in pdf_obj.pages:
+        tables = page.extract_tables()
+        for table in tables:
+            if table:
+                all_tables.append(pd.DataFrame(table))
+    
+    if not all_tables:
+        print("⚠️ IDFC: No tables found.")
+        return pd.DataFrame()
+
+    df = pd.concat(all_tables, ignore_index=True)
+
+    # 1. Drop known junk rows
+    if len(df) > 5:
+        df = df.drop(index=[0,1,2,3,4]).reset_index(drop=True)
+    else:
+        return pd.DataFrame()
+
+    # 2. Set Headers
+    df.columns = df.iloc[0]
+    df = df[1:].reset_index(drop=True)
+    df.columns = _clean_columns(df.columns)
+
+    # 3. Clean Headers & Values
+    cols_to_drop = ["processed_date_time", "pool_drcr", "closing_pool_balance_rs", "closing_tag_balance_rs"]
+    df = df.drop(columns=cols_to_drop, errors="ignore")
+
+    replacements = {"drcr": "debit_credit", "rs": "rupees", "amt": "amount", "bal": "balance"}
+    for k, v in replacements.items():
+        df.columns = df.columns.str.replace(k, v, regex=False)
+
+    for col in df.columns:
+        df[col] = df[col].apply(_clean_cell_value)
+
+    # 4. 🔥 REPAIR SPLIT ROWS (Merging wrapped IDs)
+    if "travel_date_time" in df.columns and "unique_transaction_id" in df.columns:
+        rows_to_drop = []
+        for i in range(1, len(df)):
+            curr_date = str(df.loc[i, "travel_date_time"])
+            curr_id_frag = str(df.loc[i, "unique_transaction_id"])
+            
+            is_invalid_date = (curr_date == "" or curr_date.lower() == "nan" or "nan" in curr_date.lower())
+            has_fragment = (curr_id_frag != "" and curr_id_frag.lower() != "nan")
+            
+            if is_invalid_date and has_fragment:
+                prev_idx = i - 1
+                while prev_idx in rows_to_drop and prev_idx > 0:
+                    prev_idx -= 1
+                
+                if prev_idx >= 0:
+                    current_val = str(df.loc[prev_idx, "unique_transaction_id"])
+                    if "HR" not in curr_id_frag and "DL" not in curr_id_frag: 
+                         df.at[prev_idx, "unique_transaction_id"] = current_val + curr_id_frag
+                         rows_to_drop.append(i)
+
+        if rows_to_drop:
+            df = df.drop(rows_to_drop).reset_index(drop=True)
+
+    # 5. Extract Vehicle No from Header Rows
+    if "travel_date_time" in df.columns:
+        if "vehicle_number" not in df.columns:
+            df["vehicle_number"] = None
+
+        current_vehicle = None
+        rows_to_drop = []
+
+        for idx, row in df.iterrows():
+            val = str(row["travel_date_time"]).strip()
+            match = re.search(r'([A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4})', val.replace(" ", ""))
+            is_date = re.search(r'\d{2}-\d{2}-\d{4}', val)
+            
+            if match and not is_date:
+                current_vehicle = match.group(1)
+                rows_to_drop.append(idx)
+            else:
+                existing_veh = str(row.get("vehicle_number", "")).strip()
+                if current_vehicle and (existing_veh == "" or existing_veh.lower() == "nan"):
+                    df.at[idx, "vehicle_number"] = current_vehicle
+
+        if rows_to_drop:
+            df = df.drop(rows_to_drop).reset_index(drop=True)
+
+    # 6. Cleaning Helpers
+    def _clean_vehicle_no(x):
+        return x.replace(" ", "").strip() if isinstance(x, str) else x
+
+    def _clean_datetime(x):
+        if not isinstance(x, str): return x
+        x = re.sub(r"\s+", " ", x).strip()
+        x = re.sub(r"(\d{2})-(\d)\s(\d{3})", r"\1-\2\3", x)
+        x = re.sub(r"(\d{2}):(\d)\s(\d):(\d{2})", r"\1:\2\3:\4", x)
+        return x
+
+    def _clean_reference_id(x):
+        return x.replace(" ", "") if isinstance(x, str) else x
+
+    if "vehicle_number" in df.columns:
+        df["vehicle_number"] = df["vehicle_number"].apply(_clean_vehicle_no)
+    
+    if "travel_date_time" in df.columns:
+        df["travel_date_time"] = df["travel_date_time"].apply(_clean_datetime)
+    
+    if "unique_transaction_id" in df.columns:
+        df["unique_transaction_id"] = df["unique_transaction_id"].apply(_clean_reference_id)
+        def safe_convert(x):
+            try:
+                if pd.isna(x): return ""
+                x_str = str(x).strip()
+                if x_str.replace('.', '', 1).isdigit():
+                    return format(float(x_str), ".0f")
+                return x_str
+            except:
+                return str(x)
+        df["unique_transaction_id"] = df["unique_transaction_id"].apply(safe_convert)
+
+    if "activity" in df.columns:
+        df["activity"] = df["activity"].astype(str).str.strip()
+        df = df[~df["activity"].str.lower().isin(["recharge", "", "nan", "none"])]
+
+    # ----------------------------------------------------------------------
+    # 🔥 FIX: SMART COLUMN MAPPING (CATCHES PLAZA NAME & ID)
+    # ----------------------------------------------------------------------
+    final_map = {}
+    
+    for col in df.columns:
+        c = col.lower()
+        
+        if "vehicle" in c:
+            final_map[col] = "Vehicle No"
+        elif "date" in c and "time" in c:
+            final_map[col] = "Travel Date Time"
+        elif "unique" in c or ("transaction" in c and "id" in c):
+            final_map[col] = "Unique Transaction ID"
+        elif "activity" in c:
+            final_map[col] = "Activity"
+        elif "debit" in c or "amount" in c:
+            final_map[col] = "Tag Dr/Cr"
+            
+        # --- Plaza Logic ---
+        # 1. Plaza ID: Look for "plaza" + "id" OR "lane" + "id"
+        elif ("plaza" in c and "id" in c) or ("lane" in c and "id" in c):
+             final_map[col] = "Plaza ID"
+             
+        # 2. Plaza Name: Look for "plaza" (without ID) OR "description" OR "toll"
+        elif "plaza" in c or "description" in c or "toll" in c:
+             # Ensure we don't accidentally map the ID column if logic overlapped
+             if "id" not in c:
+                 final_map[col] = "Plaza Name"
+
+    df.rename(columns=final_map, inplace=True)
+
+    return df
+# ==========================================
+# 4. MAIN FASTAG DATA CLEANER (PDF)
+# ==========================================
+def process_fastag_data(file_data_list):
     """
-    Process Fastag data to match the FastagData model.
+    file_data_list: List of tuples -> [(filename, bytes), (filename, bytes)]
     """
-    # Standardize column names to match model
-    df = df.rename(columns={
-        'fastag_id': 'fastag_id',
-        'vehicle_number': 'vehicle_number',
-        'time': 'time',
-       
-    })
+    try:
+        print(f"🔹 Starting Fastag Processing for {len(file_data_list)} files...")
+        
+        processed_dfs = []
 
+        for filename, content in file_data_list:
+            try:
+                fname_lower = filename.lower()
+                
+                with pdfplumber.open(io.BytesIO(content)) as pdf:
+                    df_temp = None
+                    
+                    if "idfc" in fname_lower:
+                        print(f"🔹 File '{filename}' -> Detected IDFC Logic")
+                        df_temp = _process_idfc(pdf)
+                    
+                    elif "icici" in fname_lower:
+                        print(f"🔹 File '{filename}' -> Detected ICICI Logic")
+                        df_temp = _process_icici(pdf)
+                    
+                    else:
+                        print(f"⚠️ File '{filename}' -> No Bank Name found. Defaulting to ICICI.")
+                        df_temp = _process_icici(pdf)
 
+                    if df_temp is not None and not df_temp.empty:
+                        processed_dfs.append(df_temp)
 
+            except Exception as e:
+                print(f"⚠️ Error reading file {filename}: {e}")
+                continue
+
+        if not processed_dfs:
+            print("❌ No valid data extracted.")
+            return None, None, None
+
+        # Merge
+        final_df = pd.concat(processed_dfs, ignore_index=True)
+
+        # Enforce Columns
+        desired_columns = [
+            "Vehicle No", "Travel Date Time", "Unique Transaction ID", 
+            "Activity", "Plaza Name", "Plaza ID", "Tag Dr/Cr"
+        ]
+
+        for col in desired_columns:
+            if col not in final_df.columns:
+                final_df[col] = ""
+
+        final_df = final_df[desired_columns]
+
+        # General Cleaning (Safety check)
+        if "Travel Date Time" in final_df.columns:
+            mask = final_df["Travel Date Time"].astype(str).str.lower().str.contains("date|total|page", na=False)
+            final_df = final_df[~mask]
+
+        final_df["Vehicle No"] = (
+            final_df["Vehicle No"].astype(str)
+            .str.replace(" ", "", regex=False)
+            .str.replace("-", "", regex=False)
+            .str.upper()
+            .replace("NAN", "")
+            .replace("NONE", "")
+        )
+
+        final_df["Tag Dr/Cr"] = pd.to_numeric(
+            final_df["Tag Dr/Cr"].astype(str).str.replace(",", ""), errors='coerce'
+        ).fillna(0)
+
+        final_df = final_df.fillna("")
+
+        print(f"🔹 Processing complete. Final shape: {final_df.shape}")
+        
+        from .cleaner import create_styled_excel 
+        return create_styled_excel(final_df, "Fastag_Cleaned")
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"❌ Fastag Cleaner Error: {e}")
+        return None, None, None

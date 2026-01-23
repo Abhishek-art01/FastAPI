@@ -24,7 +24,7 @@ from sqladmin.authentication import AuthenticationBackend
 from .auth import verify_password, get_password_hash
 from .database import create_db_and_tables, get_session, engine
 from .models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
-from .cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data
+from .cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data, process_fastag_data
 
 # --- 1. CONFIGURATION & PATHS ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -410,6 +410,38 @@ async def clean_data(
                 "file_url": filename,
                 "rows_processed": row_count,
                 "db_rows_added": rows_saved
+            }
+
+        # --- E. FASTAG DATA (PDF) ---
+        elif cleanerType == "fastag":
+            # 1. Collect files as (filename, content) tuples
+            file_data = []
+            for f in files:
+                content = await f.read()
+                file_data.append((f.filename, content))  # <--- Pass filename here!
+            
+            # 2. Pass to function
+            df_result, excel_output, filename = process_fastag_data(file_data)
+
+            # 3. Handle Errors
+            if excel_output is None:
+                return Response("Error processing Fastag PDF", status_code=400)
+
+            # 4. Save to Disk
+            generated_dir = DIRS["cleaner"] / "generated"
+            os.makedirs(generated_dir, exist_ok=True)
+            save_path = generated_dir / filename
+            
+            with open(save_path, "wb") as f:
+                f.write(excel_output.read())
+
+            # 5. Return Response
+            row_count = len(df_result) if df_result is not None else 0
+            return {
+                "status": "success",
+                "file_url": filename,
+                "rows_processed": row_count,
+                "db_rows_added": 0
             }
 
     except Exception as e:
