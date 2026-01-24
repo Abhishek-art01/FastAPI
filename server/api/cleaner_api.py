@@ -6,7 +6,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException,Fastapi
+from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, StreamingResponse
@@ -30,18 +30,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CLIENT_DIR = BASE_DIR / "client"
 
 templates = Jinja2Templates(directory=str(CLIENT_DIR / "DataCleaner"))
-router = APIRouter(prefix="/api")
+router = APIRouter()
 
 # ==========================================
 # 🚀 DATA CLEANER API 
 # ==========================================
-@app.get("/cleaner")
+@router.get("/cleaner")
 async def cleaner_page(request: Request):
     if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
-    return templates["cleaner"].TemplateResponse("Datacleaner.html", {"request": request, "user": request.session.get("user")})
+    return templates.TemplateResponse(
+    "Datacleaner.html", 
+    {"request": request, "user": request.session.get("user")}
+)
 
 
-@app.post("/clean-data")
+@router.post("/clean-data")
 async def clean_data(
     files: List[UploadFile] = File(...),
     cleanerType: str = Form(...),

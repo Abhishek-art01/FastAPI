@@ -6,7 +6,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException,Fastapi
+from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, StreamingResponse
@@ -29,25 +29,29 @@ from ..cleaner.fastag_data_cleaner import process_fastag_data
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CLIENT_DIR = BASE_DIR / "client"
 
-templates = Jinja2Templates(directory=str(CLIENT_DIR / "HomePage"))
+# 2. Define Templates
+templates = {
+    "home": Jinja2Templates(directory=str(CLIENT_DIR / "HomePage")),
+    "login": Jinja2Templates(directory=str(CLIENT_DIR / "LoginPage")),
+}
 
-router = APIRouter(prefix="/api")
+router = APIRouter()
 
 # --- 7. PAGE ROUTES ---
-@app.get("/")
+@router.get("/")
 async def read_root(request: Request):
     user = request.session.get("user")
     if not user:
         return RedirectResponse(url="/login", status_code=303)
     return templates["home"].TemplateResponse("homepage.html", {"request": request, "user": user})
 
-@app.get("/login")
+@router.get("/login")
 async def login_page(request: Request):
     if request.session.get("user"):
         return RedirectResponse(url="/", status_code=303)
     return templates["login"].TemplateResponse("login.html", {"request": request})
 
-@app.post("/login")
+@router.post("/login")
 async def login_user(request: Request, username: str = Form(...), password: str = Form(...), session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.username == username)).first()
     if user and verify_password(password, user.password_hash):
@@ -55,7 +59,7 @@ async def login_user(request: Request, username: str = Form(...), password: str 
         return RedirectResponse(url="/", status_code=303)
     return templates["login"].TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"})
 
-@app.get("/logout")
+@router.get("/logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/")
@@ -63,7 +67,7 @@ async def logout(request: Request):
 
 
 
-@app.get("/favicon.ico", include_in_schema=False)
+@router.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(status_code=204) 
 

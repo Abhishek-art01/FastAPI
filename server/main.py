@@ -1,39 +1,19 @@
 import os
-import io
-from sqlalchemy import text
-import pandas as pd
 from pathlib import Path
 from contextlib import asynccontextmanager
-from typing import List, Optional
-from datetime import datetime
+from sqlalchemy import text
+from sqlmodel import Session
 
-from fastapi import FastAPI, Depends, Request, Form, Response, UploadFile, File, HTTPException
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, StreamingResponse
+from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from pydantic import BaseModel
 
-# SQLModel & Admin
-from sqlmodel import select, Session, desc, col, update, SQLModel
-from sqladmin import Admin, ModelView
-from sqladmin.authentication import AuthenticationBackend
-
-# --- INTERNAL IMPORTS ---
-from .auth import verify_password, get_password_hash
-from .database import create_db_and_tables, get_session, engine
-from .models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
-from .api.cleaner_api import cleaner_api
-from .api.gps_api import gps_api
-from .api.locality_api import locality_api
-from .api.page_route_api import page_route_api
-from .api.download_api import download_api
-from .cleaner.mis_data_cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data
-from .cleaner.fastag_data_cleaner import process_fastag_data
-from .database import create_db_and_tables
-from .admin import setup_admin 
-
+# Internal Imports
+from .database import create_db_and_tables, engine
+from .admin import setup_admin
+from .api import cleaner_api, gps_api, locality_api, page_route_api, download_api
 
 # --- 1. CONFIGURATION & PATHS ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -50,14 +30,29 @@ DIRS = {
     "components": CLIENT_DIR / "Components"
 }
 
+# --- 2. LIFESPAN (Startup & Sequence Fix) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    
+    # Auto-fix sequence for Address Table (Prevents "Key (id)=(x) already exists" error)
+    try:
+        with Session(engine) as session:
+            session.exec(text("SELECT setval(pg_get_serial_sequence('t3_address_locality', 'id'), coalesce(max(id),0) + 1, false) FROM t3_address_locality;"))
+            session.commit()
+            print("✅ Address Table Sequence Sync Completed.")
+    except Exception:
+        pass 
+        
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(cleaner_api.router)
 app.include_router(gps_api.router)
 app.include_router(locality_api.router)
 app.include_router(page_route_api.router)
 app.include_router(download_api.router)
-app.include_router(operation_api.router)
-app.include_router(admin_api.router)
 
 
 # --- 4. STATIC FILES & TEMPLATES ---
@@ -81,23 +76,7 @@ templates = {
 
 
 
-# --- 2. LIFESPAN (Startup & Sequence Fix) ---
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    create_db_and_tables()
-    
-    # Auto-fix sequence for Address Table (Prevents "Key (id)=(x) already exists" error)
-    try:
-        with Session(engine) as session:
-            session.exec(text("SELECT setval(pg_get_serial_sequence('t3_address_locality', 'id'), coalesce(max(id),0) + 1, false) FROM t3_address_locality;"))
-            session.commit()
-            print("✅ Address Table Sequence Sync Completed.")
-    except Exception:
-        pass 
-        
-    yield
 
-app = FastAPI(lifespan=lifespan)
 
 # --- 3. MIDDLEWARE ---
 app.add_middleware(

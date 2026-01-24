@@ -11,7 +11,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException,Fastapi
+from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, StreamingResponse
@@ -30,6 +30,7 @@ from ..database import create_db_and_tables, get_session, engine
 from ..models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
 from ..cleaner.mis_data_cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data
 from ..cleaner.fastag_data_cleaner import process_fastag_data
+from ..models import LocalityMappingSchema,BulkMappingSchema, NewMasterSchema
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -37,21 +38,24 @@ CLIENT_DIR = BASE_DIR / "client"
 
 templates = Jinja2Templates(directory=str(CLIENT_DIR / "LocalityCorner"))
 
-router = APIRouter(prefix="/api")
+router = APIRouter()
 # ==========================================
 # 📍 LOCALITY MANAGER API (Complete)
 # ==========================================
 
 # 1. PAGE ROUTE
-@app.get("/locality-manager")
+@router.get("/locality-manager")
 async def locality_manager_page(request: Request):
     if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
-    return templates["locality"].TemplateResponse("Localitycorner.html", {"request": request, "user": request.session.get("user")})
+    return templates.TemplateResponse(
+    "Localitycorner.html", 
+    {"request": request, "user": request.session.get("user")}
+)
 
 
 
 # 2. API: Get Dropdown Data (One-line fetch & format)
-@app.get("/api/dropdown-localities/")
+@router.get("/api/dropdown-localities/")
 def get_master_localities(session: Session = Depends(get_session)):
     return [
         {**loc.model_dump(), "billing_km": km or "-"} 
@@ -63,7 +67,7 @@ def get_master_localities(session: Session = Depends(get_session)):
     ]
 
 # 3. API: View All / Pagination
-@app.get("/api/localities/")
+@router.get("/api/localities/")
 def get_address_table(page: int = 1, search: str = "", session: Session = Depends(get_session)):
     limit = 20
     offset = (page - 1) * limit
@@ -101,7 +105,7 @@ def get_address_table(page: int = 1, search: str = "", session: Session = Depend
     }
 
 # 4. API: Get Next Pending Item
-@app.get("/api/next-pending/")
+@router.get("/api/next-pending/")
 def get_next_pending(session: Session = Depends(get_session)):
     row = session.exec(select(T3AddressLocality).where(col(T3AddressLocality.locality).is_(None)).limit(1)).first()
     if not row:
@@ -109,7 +113,7 @@ def get_next_pending(session: Session = Depends(get_session)):
     return {"found": True, "data": row}
 
 # 5. API: Save Single Mapping
-@app.post("/api/save-mapping/")
+@router.post("/api/save-mapping/")
 def save_mapping(data: LocalityMappingSchema, session: Session = Depends(get_session)):
     row = session.get(T3AddressLocality, data.address_id)
     if not row:
@@ -135,7 +139,7 @@ def save_mapping(data: LocalityMappingSchema, session: Session = Depends(get_ses
     return {"success": True}
 
 # 6. API: Search Pending
-@app.get("/api/search-pending/")
+@router.get("/api/search-pending/")
 def search_pending(q: str = "", page: int = 1, session: Session = Depends(get_session)):
     limit = 50
     offset = (page - 1) * limit
@@ -153,7 +157,7 @@ def search_pending(q: str = "", page: int = 1, session: Session = Depends(get_se
     }
 
 # 7. API: Bulk Save
-@app.post("/api/bulk-save/")
+@router.post("/api/bulk-save/")
 def bulk_save(data: BulkMappingSchema, session: Session = Depends(get_session)):
     cache_values = {"locality": data.locality_name}
     
@@ -178,7 +182,7 @@ def bulk_save(data: BulkMappingSchema, session: Session = Depends(get_session)):
     return {"success": True, "count": result.rowcount}
 
 # 8. API: Add New Master Locality
-@app.post("/api/add-master-locality/")
+@router.post("/api/add-master-locality/")
 def add_master(data: NewMasterSchema, session: Session = Depends(get_session)):
     try:
         # Auto-create Zone if missing to avoid FK error

@@ -6,7 +6,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException,Fastapi
+from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, StreamingResponse
@@ -31,17 +31,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CLIENT_DIR = BASE_DIR / "client"
 
 templates = Jinja2Templates(directory=str(CLIENT_DIR / "DownloadManager"))
-router = APIRouter(prefix="/api")
+router = APIRouter()
 
 # ==========================================
 # 4. UNIVERSAL DOWNLOAD ENDPOINTS
 # ==========================================
-@app.get("/operation-manager")
+@router.get("/operation-manager")
 async def operation_manager_page(request: Request):
     if not request.session.get("user"): return RedirectResponse(url="/login", status_code=303)
-    return templates["operation-manager"].TemplateResponse("operation_manager.html", {"request": request})
+    return templates.TemplateResponse(
+    "operation_manager.html", 
+    {"request": request}
+)
 
-@app.get("/download/{filename}")
+@router.get("/download/{filename}")
 async def download_file(filename: str, request: Request):
     if not request.session.get("user"):
         return Response("Unauthorized", status_code=401)
@@ -55,7 +58,7 @@ async def download_file(filename: str, request: Request):
         filename=filename, 
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-@app.get("/api/{table_type}/download")
+@router.get("/api/{table_type}/download")
 def download_specific_table(table_type: str, session: Session = Depends(get_session)):
     model_map = {
         "operation": OperationData,
@@ -90,7 +93,7 @@ def download_specific_table(table_type: str, session: Session = Depends(get_sess
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
-@app.post("/api/operation/upload")
+@router.post("/api/operation/upload")
 async def upload_operation_data(file: UploadFile = File(...)):
     try:
         contents = await file.read()

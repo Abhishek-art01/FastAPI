@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPS Manager Dashboard</title>
-    
-    <link rel="stylesheet" href="/gps-corner-static/gps_corner.css">
+
+    <link rel="stylesheet" href="/gps-static/gps_corner.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
-    <link rel="stylesheet" href="components-static/sidebar.css">
-    <script src="components-static/sidebar.js"></script> 
+    <link rel="stylesheet" href="/components-static/sidebar.css">
+    <script src="/components-static/sidebar.js"></script>
 
     <style>
         /* --- TAB STYLES (Internal for simplicity) --- */
@@ -38,7 +39,8 @@
         }
 
         .tab-btn.active {
-            color: #1e88e5; /* Blue */
+            color: #1e88e5;
+            /* Blue */
             border-bottom: 3px solid #1e88e5;
         }
 
@@ -51,6 +53,7 @@
             margin-left: 8px;
             color: #333;
         }
+
         .tab-btn.active .tab-count {
             background: #e3f2fd;
             color: #1e88e5;
@@ -61,11 +64,23 @@
             display: none;
             animation: fadeIn 0.3s ease-in-out;
         }
+
         .tab-content.active {
-            display: grid; /* Matches your grid layout */
+            display: grid;
+            /* Matches your grid layout */
         }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 
@@ -100,17 +115,17 @@
         </div>
 
         <main id="view-pending" class="cards-wrapper tab-content active">
-            </main>
+        </main>
 
         <main id="view-completed" class="cards-wrapper tab-content">
-            </main>
+        </main>
 
     </div>
 
     <div id="toast">Data Saved Successfully!</div>
 
     <script>
-        const API_BASE_URL = "/api"; 
+        const API_BASE_URL = "/api";
         let currentTab = 'pending'; // State to remember where we are
 
         // --- INITIAL LOAD ---
@@ -137,13 +152,13 @@
             const cab = document.getElementById('filterCab').value;
             const direction = document.getElementById('filterDirection').value;
             const status = document.getElementById('filtertripid').value;
-            
+
             const pendingContainer = document.getElementById('view-pending');
             const completedContainer = document.getElementById('view-completed');
 
             // Loading State
             pendingContainer.innerHTML = '<p style="color:#666;">Loading...</p>';
-            
+
             try {
                 // Build URL with Parameters
                 let url = `${API_BASE_URL}/gps_trips?`;
@@ -166,12 +181,12 @@
                 // Update Counts on Tabs
                 document.getElementById('count-pending').innerText = pendingTrips.length;
                 document.getElementById('count-completed').innerText = completedTrips.length;
-                
+
                 // Render Lists
                 // false = Not Locked (Green Button)
-                renderList(pendingTrips, pendingContainer, false); 
+                renderList(pendingTrips, pendingContainer, false);
                 // true = Locked (Orange Button)
-                renderList(completedTrips, completedContainer, true);  
+                renderList(completedTrips, completedContainer, true);
 
             } catch (error) {
                 console.error("Error:", error);
@@ -197,7 +212,7 @@
                 const gpstime = trip.gps_time || '';
                 const endLoc = trip.journey_end_location || '';
                 const remark = trip.gps_remark || '';
-                
+
                 // If locked, disable inputs
                 const disabledAttr = isLocked ? 'disabled' : '';
 
@@ -301,7 +316,7 @@
             document.getElementById(`gps_time-${uid}`).disabled = false;
             document.getElementById(`end-${uid}`).disabled = false;
             document.getElementById(`remark-${uid}`).disabled = false;
-            
+
             document.getElementById(`btn-edit-${uid}`).classList.add('hidden');
             document.getElementById(`btn-save-${uid}`).classList.remove('hidden');
         }
@@ -352,7 +367,7 @@
             let oldVal = input.value;
             let oldCursor = input.selectionEnd;
             let digits = input.value.replace(/\D/g, "").slice(0, 8);
-            
+
             // Build mask
             let temp = digits.padEnd(8, "_");
             let p1 = temp.slice(0, 2).replace(/_/g, "-");
@@ -360,7 +375,7 @@
             let p3 = temp.slice(4, 6).replace(/_/g, "-");
             let p4 = temp.slice(6, 8).replace(/_/g, "-");
             let newVal = `${p1}:${p2} To ${p3}:${p4}`;
-            
+
             input.value = newVal;
 
             // Handle delete action
@@ -374,7 +389,7 @@
             for (let i = 0; i < newVal.length; i++) {
                 if (/\d/.test(newVal[i])) lastDigitIndex = i;
             }
-            
+
             let newCursor = lastDigitIndex + 1;
             while (newCursor < newVal.length && /[^0-9\-]/.test(newVal[newCursor])) {
                 newCursor++;
@@ -385,4 +400,5 @@
     </script>
 
 </body>
+
 </html>
