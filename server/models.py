@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, Field
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 
 # --- 1. USER & AUTH ---
 class User(SQLModel, table=True):
