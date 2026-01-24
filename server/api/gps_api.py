@@ -11,8 +11,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from datetime import datetime
-
-from fastapi import FastAPI, Depends, Request, Form, Response, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, Request, Form, Response, UploadFile, File, HTTPException,Fastapi
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, StreamingResponse
@@ -36,7 +35,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CLIENT_DIR = BASE_DIR / "client"
 
 templates = Jinja2Templates(directory=str(CLIENT_DIR / "GPSCorner"))
-app.mount("/gps-static", StaticFiles(directory=CLIENT_DIR / "GPSCorner"), name="gps_static")
 router = APIRouter(prefix="/api")
 
 
