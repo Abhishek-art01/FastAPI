@@ -3,6 +3,7 @@ import numpy as np
 import pdfplumber
 import io
 import re
+from sqlmodel import Session, select, col
 import xlrd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
