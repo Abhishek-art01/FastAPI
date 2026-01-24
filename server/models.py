@@ -274,6 +274,7 @@ class T3AddressLocality(SQLModel, table=True):
     zone: Optional[str] = Field(default=None)
     km: Optional[str] = Field(default=None)
 
+
 class vehicle_master(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     vehicle_id: Optional[str] = None
@@ -287,3 +288,16 @@ class vehicle_master(SQLModel, table=True):
     vehicle_driver_name: Optional[str] = None
     vehicle_driver_mobile: Optional[str] = None
     vehicle_rc: Optional[str] = None
+
+# --- Pydantic Schemas ---
+class LocalityMappingSchema(BaseModel):
+    address_id: int
+    locality_name: str 
+
+class BulkMappingSchema(BaseModel):
+    address_ids: List[int]
+    locality_name: str
+
+class NewMasterSchema(BaseModel):
+    locality_name: str
+    zone_name: str
