@@ -1,3 +1,31 @@
+import os
+import io
+from sqlalchemy import text
+import pandas as pd
+from pathlib import Path
+from contextlib import asynccontextmanager
+from typing import List, Optional
+from datetime import datetime
+
+from fastapi import FastAPI, Depends, Request, Form, Response, UploadFile, File, HTTPException
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse, FileResponse, JSONResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+from pydantic import BaseModel
+
+# SQLModel & Admin
+from sqlmodel import select, Session, desc, col, update, SQLModel
+from sqladmin import Admin, ModelView
+from sqladmin.authentication import AuthenticationBackend
+
+# --- INTERNAL IMPORTS ---
+from .auth import verify_password, get_password_hash
+from .database import create_db_and_tables, get_session, engine
+from .models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
+from .cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data, process_fastag_data
+
 # --- 7. PAGE ROUTES ---
 @app.get("/")
 async def read_root(request: Request):
