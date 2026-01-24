@@ -24,7 +24,10 @@ from sqladmin.authentication import AuthenticationBackend
 from .auth import verify_password, get_password_hash
 from .database import create_db_and_tables, get_session, engine
 from .models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
-from .cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data, process_fastag_data
+from .api import cleaner_api, gps_api, locality_api, page_route_api, download_api
+from .database import create_db_and_tables
+from .admin import setup_admin 
+
 
 # --- 1. CONFIGURATION & PATHS ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -40,6 +43,36 @@ DIRS = {
     "locality": CLIENT_DIR / "LocalityCorner",
     "components": CLIENT_DIR / "Components"
 }
+
+
+app.include_router(cleaner_api.router)
+app.include_router(gps_api.router)
+app.include_router(locality_api.router)
+app.include_router(page_route_api.router)
+app.include_router(download_api.router)
+app.include_router(operation_api.router)
+app.include_router(admin_api.router)
+
+
+# --- 4. STATIC FILES & TEMPLATES ---
+app.mount("/home-static", StaticFiles(directory=DIRS["home"]), name="home_static")
+app.mount("/login-static", StaticFiles(directory=DIRS["login"]), name="login_static")
+app.mount("/cleaner-static", StaticFiles(directory=DIRS["cleaner"]), name="cleaner_static")
+app.mount("/gps-static", StaticFiles(directory=DIRS["gps"]), name="gps_static")
+app.mount("/locality-static", StaticFiles(directory=DIRS["locality"]), name="locality_static")
+app.mount("/operation-manager-static", StaticFiles(directory=DIRS["operation-manager"]), name="operation-manager_static")
+app.mount("/components-static", StaticFiles(directory=DIRS["components"]), name="components_static")
+
+templates = {
+    "home": Jinja2Templates(directory=DIRS["home"]),
+    "login": Jinja2Templates(directory=DIRS["login"]),
+    "cleaner": Jinja2Templates(directory=DIRS["cleaner"]),
+    "gps": Jinja2Templates(directory=DIRS["gps"]),
+    "locality": Jinja2Templates(directory=DIRS["locality"]),
+    "operation-manager": Jinja2Templates(directory=DIRS["operation-manager"]),
+    "components": Jinja2Templates(directory=DIRS["components"]),
+}
+
 
 
 # --- 2. LIFESPAN (Startup & Sequence Fix) ---
@@ -83,24 +116,6 @@ app.add_middleware(
     same_site="lax"
 )
 
-# --- 4. STATIC FILES & TEMPLATES ---
-app.mount("/home-static", StaticFiles(directory=DIRS["home"]), name="home_static")
-app.mount("/login-static", StaticFiles(directory=DIRS["login"]), name="login_static")
-app.mount("/cleaner-static", StaticFiles(directory=DIRS["cleaner"]), name="cleaner_static")
-app.mount("/gps-corner-static", StaticFiles(directory=DIRS["gps"]), name="gps_static")
-app.mount("/locality-static", StaticFiles(directory=DIRS["locality"]), name="locality_static")
-app.mount("/operation-manager-static", StaticFiles(directory=DIRS["operation-manager"]), name="operation-manager_static")
-app.mount("/components-static", StaticFiles(directory=DIRS["components"]), name="components_static")
-
-templates = {
-    "home": Jinja2Templates(directory=DIRS["home"]),
-    "login": Jinja2Templates(directory=DIRS["login"]),
-    "cleaner": Jinja2Templates(directory=DIRS["cleaner"]),
-    "gps": Jinja2Templates(directory=DIRS["gps"]),
-    "locality": Jinja2Templates(directory=DIRS["locality"]),
-    "operation-manager": Jinja2Templates(directory=DIRS["operation-manager"]),
-    "components": Jinja2Templates(directory=DIRS["components"]),
-}
 
 
 

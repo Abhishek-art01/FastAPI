@@ -26,6 +26,13 @@ from .database import create_db_and_tables, get_session, engine
 from .models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
 from .cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data, process_fastag_data
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+CLIENT_DIR = BASE_DIR / "client"
+
+templates = Jinja2Templates(directory=str(CLIENT_DIR / "DataCleaner"))
+app.mount("/cleaner-static", StaticFiles(directory=CLIENT_DIR / "DataCleaner"), name="cleaner_static")
+router = APIRouter(prefix="/api")
+
 # ==========================================
 # 🚀 DATA CLEANER API 
 # ==========================================
