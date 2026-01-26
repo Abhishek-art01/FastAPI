@@ -40,6 +40,38 @@ MANDATORY_DB_MAP = {
     'passenger_mobile': 'passenger_mobile', 'driver_name': 'driver_name', 'DRIVER_MOBILE': 'driver_mobile'
 }
 
+def clean_columns(columns):
+    cleaned = (
+        columns
+        .str.replace(r"\n", " ", regex=True)        # remove line breaks
+        .str.replace(r"\t", " ", regex=True)        # remove tabs
+        .str.replace(r"\s+", " ", regex=True)       # normalize spaces
+        .str.strip()                                # trim edges
+        .str.lower()                                # lowercase
+        .str.replace(r"[^\w\s]", "", regex=True)    # remove special chars
+        .str.replace(" ", "_")                      # snake_case
+    )
+    return cleaned
+
+import pandas as pd
+
+def clean_address(series: pd.Series) -> pd.Series:
+    """
+    Cleans address text exactly like:
+    =UPPER(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(A2,"-"," "),","," "),"/"," "))
+    """
+    return (
+        series
+        .astype(str)
+        .str.replace("-", " ", regex=False)
+        .str.replace(",", " ", regex=False)
+        .str.replace("/", " ", regex=False)
+        .str.replace(r"\s+", " ", regex=True)  # normalize spaces
+        .str.strip()
+        .str.upper()
+    )
+
+
 def standardize_dataframe(df):
     """
     Standardizes DataFrame to match SQLModel definitions:

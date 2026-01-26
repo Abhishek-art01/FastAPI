@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
 app.include_router(cleaner_api.router)
 app.include_router(gps_api.router)
 app.include_router(locality_api.router)
@@ -100,6 +101,8 @@ app.add_middleware(
     https_only=on_render, 
     same_site="lax"
 )
+
+setup_admin(app)
 
 
 

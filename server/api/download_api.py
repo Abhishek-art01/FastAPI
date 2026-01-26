@@ -29,8 +29,9 @@ from ..cleaner.fastag_data_cleaner import process_fastag_data
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CLIENT_DIR = BASE_DIR / "client"
+GENERATED_DIR = BASE_DIR / "client" / "DataCleaner" / "generated"
 
-templates = Jinja2Templates(directory=str(CLIENT_DIR / "DownloadManager"))
+templates = Jinja2Templates(directory=str(CLIENT_DIR / "OperationManager"))
 router = APIRouter()
 
 # ==========================================
@@ -49,7 +50,7 @@ async def download_file(filename: str, request: Request):
     if not request.session.get("user"):
         return Response("Unauthorized", status_code=401)
     
-    file_path = DIRS["cleaner"] / "generated" / filename
+    file_path = GENERATED_DIR / filename
     if not file_path.exists():
         return Response("File not found", status_code=404)
         

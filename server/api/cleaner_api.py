@@ -25,9 +25,14 @@ from ..database import create_db_and_tables, get_session, engine
 from ..models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
 from ..cleaner.mis_data_cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data
 from ..cleaner.fastag_data_cleaner import process_fastag_data
+from ..cleaner.cleaner_helper import create_styled_excel
+from ..cleaner.cleaner_helper import MANDATORY_HEADERS, bulk_save_unique
 
+# 1. Setup paths relative to THIS file
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 CLIENT_DIR = BASE_DIR / "client"
+# Define the generated folder path here
+GENERATED_DIR = CLIENT_DIR / "DataCleaner" / "generated"
 
 templates = Jinja2Templates(directory=str(CLIENT_DIR / "DataCleaner"))
 router = APIRouter()
@@ -85,7 +90,7 @@ async def clean_data(
             if excel_output is None:
                 return Response("Error processing Client data", status_code=400)
             
-            generated_dir = DIRS["cleaner"] / "generated"
+            generated_dir = GENERATED_DIR
             os.makedirs(generated_dir, exist_ok=True)
             save_path = generated_dir / filename
             with open(save_path, "wb") as f:
@@ -119,7 +124,7 @@ async def clean_data(
             if excel_output is None:
                 return Response("Error processing Raw data", status_code=400)
             
-            generated_dir = DIRS["cleaner"] / "generated"
+            generated_dir = GENERATED_DIR
             os.makedirs(generated_dir, exist_ok=True)
             save_path = generated_dir / filename
             with open(save_path, "wb") as f:
@@ -144,7 +149,7 @@ async def clean_data(
             if excel_output is None:
                 return Response("Error processing data", status_code=400)
 
-            generated_dir = DIRS["cleaner"] / "generated"
+            generated_dir = GENERATED_DIR
             os.makedirs(generated_dir, exist_ok=True)
             save_path = generated_dir / filename
             with open(save_path, "wb") as f:
@@ -170,7 +175,7 @@ async def clean_data(
                 return Response("Error processing BA data", status_code=400)
 
             # 1. Save the generated file to disk so the frontend can download it
-            generated_dir = DIRS["cleaner"] / "generated"  # Ensure you have DIRS defined or use a hardcoded path
+            generated_dir = GENERATED_DIR
             os.makedirs(generated_dir, exist_ok=True)
             save_path = generated_dir / filename
             
@@ -202,7 +207,7 @@ async def clean_data(
                 return Response("Error processing Fastag PDF", status_code=400)
 
             # 4. Save to Disk
-            generated_dir = DIRS["cleaner"] / "generated"
+            generated_dir = GENERATED_DIR
             os.makedirs(generated_dir, exist_ok=True)
             save_path = generated_dir / filename
             
