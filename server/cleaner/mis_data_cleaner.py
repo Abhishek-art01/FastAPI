@@ -7,7 +7,20 @@ import xlrd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 import traceback
-from .cleaner_helper import MANDATORY_HEADERS, bulk_save_unique
+from openpyxl import load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+
+
+from .cleaner_helper import (
+    get_mandatory_columns, 
+    get_xls_style_data, 
+    standardize_dataframe, 
+    format_excel_sheet,
+    clean_columns,
+    clean_address
+)
+
+
 # ==========================================
 # 1. CLIENT DATA CLEANER
 # ==========================================
@@ -192,153 +205,163 @@ def process_raw_data(file_list_bytes):
 # ==========================================
 # 3. OPERATION DATA CLEANER
 # ==========================================
-def process_operation_data(file_list_bytes):
-    # Mapping specifically for reading operation files
-    READ_MAP = {
-        'DATE': 'Shift Date', 'TRIP ID': 'Trip ID', 'FLT NO.': 'Flight Number', 'SAP ID': 'Employee ID',
-        'EMP NAME': 'Employee Name', 'EMPLOYEE ADDRESS': 'Address', 'PICKUP LOCATION': 'Landmark',
-        'DROP LOCATION': 'drop_location', 'CAB NO': 'Cab Reg No', 'AIRPORT DROP': 'Shift Time', 
-        'GUARD ROUTE': 'guard_route', 'MARSHALL': 'guard_route', 'REMARKS': 'MiS Remark'
-    }
-    SKIP_HEADERS = ['PICKUP TIME', 'CONTACT NO', 'CONTACT NO.']
+import pandas as pd
+import io
+import xlrd
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from .cleaner_helper import (
+    get_mandatory_columns, 
+    get_xls_style_data, 
+    standardize_dataframe, 
+    format_excel_sheet
+)
 
+def process_operation_data(file_list_bytes):
+    # 1. Configuration
+    COLUMN_TO_RENAME = {
+        'DATE': 'shift_date', 
+        'TRIP ID': 'trip_id', 
+        'FLT NO.': 'flight_number', 
+        'SAP ID': 'employee_id',
+        'EMP NAME': 'employee_name', 
+        'EMPLOYEE ADDRESS': 'employee_address', 
+        'PICKUP LOCATION': 'landmark',
+        'DROP LOCATION': 'office',  
+        'CAB NO': 'cab_registration_no', 
+        'AIRPORT DROP TIME': 'shift_time', 
+        'PICKUP TIME': 'pickup_time',
+        'REMARKS': 'mis_remark'
+    }
+    SKIP_HEADERS = ['CONTACT NO.', 'GUARD ROUTE']
+
+    # 2. Initialize Workbook & Shared Styles
     wb = Workbook()
     ws = wb.active
     ws.title = "Operation_Data"
     
-    # Styles
-    header_fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
-    header_font = Font(size=11, bold=True, color="FFFFFF")
-    align_center = Alignment(horizontal='center', vertical='center')
-    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    # Styles for openpyxl
+    border = Border(left=Side(style="thin"), right=Side(style="thin"), 
+                    top=Side(style="thin"), bottom=Side(style="thin"))
+    align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # Write Mandatory Headers
+    # 3. Setup Headers
+    MANDATORY_HEADERS = get_mandatory_columns()
     for col_idx, header in enumerate(MANDATORY_HEADERS, 1):
         cell = ws.cell(row=1, column=col_idx, value=header)
-        cell.fill = header_fill; cell.font = header_font; cell.alignment = align_center; cell.border = border
-        ws.column_dimensions[cell.column_letter].width = 15
-
-    target_row = 2
-    files_processed = 0
-    data_rows = [] 
     
-    # Track extra headers found dynamically
+    # 4. Processing Loop
+    target_row = 2
+    data_rows = [] 
     extra_headers_map = {} 
     next_extra_col_idx = len(MANDATORY_HEADERS) + 1
 
     for filename, content in file_list_bytes:
-        if not filename.lower().endswith('.xls'): continue
+        if not filename.lower().endswith('.xls'):
+            continue
+            
         try:
+            # Open legacy XLS with formatting
             rb = xlrd.open_workbook(file_contents=content, formatting_info=True)
             rs = rb.sheet_by_index(0)
             
-            # Map Source Columns
-            source_headers = [str(rs.cell_value(0, c)).strip().upper() for c in range(rs.ncols)]
+            # Map Source Columns to Targets
             col_to_target_map = {} 
-            
+            source_headers = [str(rs.cell_value(0, c)).strip().upper() for c in range(rs.ncols)]
+
             for idx, raw_header in enumerate(source_headers):
-                if any(skip in raw_header for skip in SKIP_HEADERS): continue
+                if any(skip in raw_header for skip in SKIP_HEADERS): 
+                    continue
                 
-                match = next((val for key, val in READ_MAP.items() if key in raw_header), None)
+                match = next((val for key, val in COLUMN_TO_RENAME.items() if key in raw_header), None)
                 if match:
                     col_to_target_map[idx] = {'type': 'mandatory', 'name': match}
                 else:
-                    clean_name = raw_header
-                    if clean_name not in extra_headers_map:
-                        extra_headers_map[clean_name] = next_extra_col_idx
-                        # Add header to Excel
-                        cell = ws.cell(row=1, column=next_extra_col_idx, value=clean_name)
-                        cell.fill = header_fill; cell.font = header_font; cell.alignment = align_center; cell.border = border
-                        ws.column_dimensions[cell.column_letter].width = 15
+                    # Handle Dynamic Extra Columns
+                    if raw_header not in extra_headers_map:
+                        extra_headers_map[raw_header] = next_extra_col_idx
+                        ws.cell(row=1, column=next_extra_col_idx, value=raw_header)
                         next_extra_col_idx += 1
-                    col_to_target_map[idx] = {'type': 'extra', 'name': clean_name}
+                    col_to_target_map[idx] = {'type': 'extra', 'name': raw_header}
 
-            start_row = 0 if files_processed == 0 else 1 
-            
+            # Process Rows
             for r_idx in range(1, rs.nrows):
                 row_vals = rs.row_values(r_idx)
-                # Skip empty/near empty rows
-                if sum(1 for v in row_vals if str(v).strip() != "") <= 2: continue
+                if sum(1 for v in row_vals if str(v).strip() != "") <= 2: 
+                    continue
                 
                 row_data_map = {} 
                 db_row_dict = {}  
                 
                 for c_idx in range(rs.ncols):
-                    if c_idx not in col_to_target_map: continue
+                    if c_idx not in col_to_target_map: 
+                        continue
+                        
                     mapping = col_to_target_map[c_idx]
                     target_header = mapping['name']
-                    
                     val = rs.cell_value(r_idx, c_idx)
-                    bg, fg, bold = get_xls_style_data(rb, rs.cell_xf_index(r_idx, c_idx))
                     
-                    style_data = {'val': val, 'bg': bg, 'fg': fg, 'bold': bold}
+                    # Extract original styling
+                    bg, fg, is_bold = get_xls_style_data(rb, rs.cell_xf_index(r_idx, c_idx))
                     
-                    if mapping['type'] == 'mandatory':
-                         row_data_map[target_header] = style_data
-                         if target_header in MANDATORY_DB_MAP:
-                             db_row_dict[MANDATORY_DB_MAP[target_header]] = val
-                         elif target_header == 'guard_route':
-                             db_row_dict['guard_route'] = val
-                         elif target_header == 'drop_location':
-                             db_row_dict['drop_location'] = val
-                    else:
-                        row_data_map[f"EXTRA_{target_header}"] = style_data
-                        db_row_dict[target_header] = val # Store extra in DB dict too if needed by model
+                    style_data = {'val': val, 'bg': bg, 'fg': fg, 'bold': is_bold}
+                    row_data_map[target_header] = style_data
+                    db_row_dict[target_header] = val
 
-                # Write Row to Excel
-                ws.row_dimensions[target_row].height = 25
+                # Write to Excel with formatting
+                ws.row_dimensions[target_row].height = 30
                 
-                # Write Mandatory
+                # Write Mandatory Columns
                 for c_out, m_header in enumerate(MANDATORY_HEADERS, 1):
                     cell = ws.cell(row=target_row, column=c_out)
                     if m_header in row_data_map:
                         data = row_data_map[m_header]
                         cell.value = data['val']
-                        if data['bg']: cell.fill = PatternFill(start_color=data['bg'], end_color=data['bg'], fill_type='solid')
+                        if data['bg']:
+                            cell.fill = PatternFill(start_color=data['bg'], end_color=data['bg'], fill_type='solid')
                         cell.font = Font(size=11, bold=data['bold'], color=data['fg'] if data['fg'] else None)
-                    else: cell.value = ""
-                    cell.alignment = align_center; cell.border = border
+                    
+                    cell.alignment = align_center
+                    cell.border = border
                 
-                # Write Extra
+                # Write Extra Columns
                 for extra_name, extra_col_idx in extra_headers_map.items():
-                    key = f"EXTRA_{extra_name}"
                     cell = ws.cell(row=target_row, column=extra_col_idx)
-                    if key in row_data_map:
-                        data = row_data_map[key]
+                    if extra_name in row_data_map:
+                        data = row_data_map[extra_name]
                         cell.value = data['val']
-                        if data['bg']: cell.fill = PatternFill(start_color=data['bg'], end_color=data['bg'], fill_type='solid')
-                        cell.font = Font(size=11, bold=data['bold'], color=data['fg'] if data['fg'] else None)
-                    else: cell.value = ""
-                    cell.alignment = align_center; cell.border = border
+                    cell.alignment = align_center
+                    cell.border = border
                 
                 data_rows.append(db_row_dict)
                 target_row += 1
             
-            files_processed += 1
             rb.release_resources()
-        except Exception as e: print(f"Error {filename}: {e}")
+        except Exception as e:
+            print(f"Error processing {filename}: {e}")
 
+    # 5. Finalize Excel Formatting
+    format_excel_sheet(ws)
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     
-    if not data_rows: return None, output, "Operation_Cleaned.xlsx"
+    if not data_rows:
+        return None, output, "Operation_Cleaned.xlsx"
 
+    # 6. Dataframe Post-Processing
     df_db = pd.DataFrame(data_rows)
-
-    # Post-Process Dates/Times
+    
     if 'shift_date' in df_db.columns: 
-        df_db['shift_date'] = pd.to_datetime(df_db['shift_date'], errors='coerce').dt.strftime('%d-%m-%Y')
-    if 'shift_time' in df_db.columns: 
-        df_db['shift_time'] = pd.to_datetime(df_db['shift_time'], errors='coerce', format='mixed').dt.strftime('%H:%M')
-    if 'guard_route' in df_db.columns:
-        df_db['guard_route'] = df_db['guard_route'].astype(str).apply(lambda x: 'Guard' if 'marshall' in x.lower() else '')
-        # Map internal 'guard_route' to 'route_status' or 'marshall' field if strictly required
-        # Note: OperationData Model uses 'route_status', but raw 'marshall' map logic existed. 
-        # Standardize will handle missing cols, but we populated 'guard_route' in dict.
+        df_db['shift_date'] = pd.to_datetime(df_db['shift_date'], errors='coerce').dt.strftime('%Y-%m-%d')
+    
+    if 'shift_time' in df_db.columns:
+        # Custom time parsing if needed
+        pass 
 
-    # Standardize (Matches OperationData Model)
+    # 7. Sync with DB Model
     df_db = standardize_dataframe(df_db)
+    
     return df_db, output, "Operation_Cleaned.xlsx"
 
 

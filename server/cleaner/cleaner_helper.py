@@ -8,37 +8,107 @@ import xlrd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 import traceback
+from openpyxl.utils import get_column_letter
 
-# ==========================================
-# 0. CONFIGURATION & GLOBAL HELPERS
-# ==========================================
 
-# 1. The Headers for Excel Output (Friendly Names)
-MANDATORY_HEADERS = [
-    'Shift Date', 'Trip ID', 'Employee ID', 'Gender', 'EMP_CATEGORY', 'Employee Name', 
-    'Shift Time', 'Pickup Time', 'Drop Time', 'Trip Direction', 'Cab Reg No', 
-    'Cab Type', 'Vendor', 'Office', 'Airport Name', 'Landmark', 'Address', 
-    'Flight Number', 'Flight Category', 'Flight Route', 'Flight Type', 
-    'Trip Date', 'MiS Remark', 'In App/ Extra', 'UNA2', 'UNA', 
-    'Route Status', 'Clubbing Status', 'GPS TIME', 'GPS REMARK',
-    'passenger_mobile', 'driver_name', 'DRIVER_MOBILE' 
-]
+#=================================================================
 
-# 2. Map Friendly Headers -> SQLModel Fields (snake_case)
-MANDATORY_DB_MAP = {
-    'Shift Date': 'shift_date', 'Trip ID': 'trip_id', 'Employee ID': 'employee_id', 
-    'Gender': 'gender', 'EMP_CATEGORY': 'emp_category', 'Employee Name': 'employee_name', 
-    'Shift Time': 'shift_time', 'Pickup Time': 'pickup_time', 'Drop Time': 'drop_time', 
-    'Trip Direction': 'trip_direction', 'Cab Reg No': 'cab_reg_no', 'Cab Type': 'cab_type', 
-    'Vendor': 'vendor', 'Office': 'office', 'Airport Name': 'airport_name', 
-    'Landmark': 'landmark', 'Address': 'address', 'Flight Number': 'flight_number', 
-    'Flight Category': 'flight_category', 'Flight Route': 'flight_route', 
-    'Flight Type': 'flight_type', 'Trip Date': 'trip_date', 'MiS Remark': 'mis_remark', 
-    'In App/ Extra': 'in_app_extra', 'UNA2': 'una2', 'UNA': 'una', 
-    'Route Status': 'route_status', 'Clubbing Status': 'clubbing_status', 
-    'GPS TIME': 'gps_time', 'GPS REMARK': 'gps_remark',
-    'passenger_mobile': 'passenger_mobile', 'driver_name': 'driver_name', 'DRIVER_MOBILE': 'driver_mobile'
-}
+metadata = {created_at,
+    updated_at,
+    operation_type,
+    processed_by}
+
+def get_mandatory_columns():
+    """Get all column names from OperationData model"""
+    columns = []
+    
+    # Get fields from model
+    for field_name, field in OperationData.__fields__.items():
+        # Skip metadata columns
+        if field_name not in metadata:
+            columns.append(field_name)
+    
+    return columns
+
+from openpyxl.styles import PatternFill, Font, Alignment
+from openpyxl.utils import get_column_letter
+
+def format_excel_headers(ws, start_row=1, start_col=1):
+    """
+    Format headers in an Excel worksheet.
+    
+    Args:
+        ws: Worksheet object
+        start_row: Row number where headers start (default: 1)
+        start_col: Column number where headers start (default: 1)
+    """
+    
+    # Define styling
+    header_fill = PatternFill(
+        start_color="366092",  # Dark blue
+        end_color="366092",
+        fill_type="solid"
+    )
+    
+    header_font = Font(
+        name="Calibri",
+        size=11,
+        bold=True,
+        color="FFFFFF"  # White
+    )
+    
+    header_alignment = Alignment(
+        horizontal="center",
+        vertical="center",
+        wrap_text=True  # Enable text wrapping
+    )
+    
+    # Get max column with data
+    max_column = ws.max_column
+    
+    # Apply formatting to each header cell
+    for col in range(start_col, max_column + 1):
+        cell = ws.cell(row=start_row, column=col)
+        
+        # Apply styling if cell has a value
+        if cell.value:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+    
+    # Set row height for header row
+    ws.row_dimensions[start_row].height = 30
+    
+    # Auto-fit column widths
+    for col in range(start_col, max_column + 1):
+        column_letter = get_column_letter(col)
+        max_length = 0
+        
+        # Check all cells in the column (including header)
+        for row in range(start_row, ws.max_row + 1):
+            cell = ws.cell(row=row, column=col)
+            
+            if cell.value:
+                # Calculate length considering line breaks for wrapped text
+                if isinstance(cell.value, str):
+                    # Find the longest line if text wraps
+                    lines = str(cell.value).split('\n')
+                    line_length = max(len(line) for line in lines)
+                else:
+                    line_length = len(str(cell.value))
+                
+                # Add a little padding
+                adjusted_length = line_length + 2
+                
+                if adjusted_length > max_length:
+                    max_length = adjusted_length
+        
+        # Set column width (minimum 10, maximum 50)
+        column_width = min(max(max_length, 10), 50)
+        ws.column_dimensions[column_letter].width = column_width
+
+    return ws
+
 
 def clean_columns(columns):
     cleaned = (
@@ -53,7 +123,6 @@ def clean_columns(columns):
     )
     return cleaned
 
-import pandas as pd
 
 def clean_address(series: pd.Series) -> pd.Series:
     """
@@ -70,6 +139,82 @@ def clean_address(series: pd.Series) -> pd.Series:
         .str.strip()
         .str.upper()
     )
+
+
+
+def format_excel_sheet(ws):
+    """
+    Final Excel formatter:
+    - Header style (blue, bold, white)
+    - Cambria font for all cells
+    - Wrap text ON
+    - Row height = 30
+    - Auto-fit columns
+    - EMPLOYEE ADDRESS width = 80
+    - EMPLOYEE NAME width = 30
+    """
+
+    # Styles
+    header_fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+    header_font = Font(name="Cambria", size=12, bold=True, color="FFFFFF")
+    cell_font = Font(name="Cambria")
+
+    align_center_wrap = Alignment(
+        horizontal="center",
+        vertical="center",
+        wrap_text=True
+    )
+
+    border = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin")
+    )
+
+    # -----------------------------
+    # Header formatting
+    # -----------------------------
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = align_center_wrap
+        cell.border = border
+
+    ws.row_dimensions[1].height = 30
+
+    # -----------------------------
+    # Cell formatting + row height
+    # -----------------------------
+    for row in ws.iter_rows(min_row=2):
+        ws.row_dimensions[row[0].row].height = 30
+        for cell in row:
+            cell.font = cell_font
+            cell.alignment = align_center_wrap
+            cell.border = border
+
+    # -----------------------------
+    # Auto-fit column width
+    # -----------------------------
+    for col in ws.columns:
+        max_length = 0
+        col_letter = get_column_letter(col[0].column)
+
+        for cell in col:
+            if cell.value:
+                max_length = max(max_length, len(str(cell.value)))
+
+        ws.column_dimensions[col_letter].width = max_length + 2
+
+    # -----------------------------
+    # Override specific columns
+    # -----------------------------
+    for cell in ws[1]:
+        if cell.value == "EMPLOYEE ADDRESS":
+            ws.column_dimensions[cell.column_letter].width = 80
+        elif cell.value == "EMPLOYEE NAME":
+            ws.column_dimensions[cell.column_letter].width = 30
+
 
 
 def standardize_dataframe(df):
