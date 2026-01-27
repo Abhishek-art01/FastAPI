@@ -240,7 +240,7 @@ def standardize_dataframe(df):
         return None # Critical missing data
 
     # 2. Sync Columns with SQLModel (Fill Missing)
-    target_cols = list(MANDATORY_DB_MAP.values())
+    target_cols = get_mandatory_columns()
     for col in target_cols:
         if col not in df.columns:
             df[col] = ""
@@ -257,36 +257,63 @@ def standardize_dataframe(df):
     final_order = target_cols + extra_cols + ['unique_id']
     return df[final_order]
 
-def get_xls_style_data(book, xf_index):
-    """ Helper to extract style (Hex Color, Bold) from xlrd book. """
+def get_xls_style_data(book, xf_index, row_idx, col_idx):
+    """
+    Extracts background and font colors from legacy .xls files.
+    Includes debug prints to identify why colors might be missed.
+    """
     try:
         xf = book.xf_list[xf_index]
         font = book.font_list[xf.font_index]
         
-        def get_hex(idx):
-            if idx is not None and idx < 64:
-                rgb = book.colour_map.get(idx)
-                if rgb and rgb != (0,0,0) and rgb != (255, 255, 255):
-                    return "{:02x}{:02x}{:02x}".format(*rgb).upper()
-            return None
+        # --- FONT COLOR DETECTION (RED) ---
+        f_idx = font.colour_index
+        rgb_f = book.colour_map.get(f_idx)
+        font_hex = None
+        
+        # Check standard red indices (8, 10, 16 are common for Red)
+        if f_idx in [10, 16]:
+            font_hex = "FF0000"
+        elif rgb_f:
+            # Check if RGB values are "Red-ish" (High Red, Low Green/Blue)
+            if rgb_f[0] > 150 and rgb_f[1] < 100 and rgb_f[2] < 100:
+                font_hex = "FF0000"
+        
+        # --- BACKGROUND COLOR DETECTION (YELLOW) ---
+        bg_idx = xf.background.pattern_colour_index
+        rgb_b = book.colour_map.get(bg_idx)
+        bg_hex = None
+        
+        # Check standard yellow indices (13, 19 are common for Yellow)
+        if bg_idx in [13, 19]:
+            bg_hex = "FFFF00"
+        elif rgb_b:
+            # Check if RGB values are "Yellow-ish"
+            if rgb_b[0] > 200 and rgb_b[1] > 200 and rgb_b[2] < 150:
+                bg_hex = "FFFF00"
 
-        bg_hex = get_hex(xf.background.pattern_colour_index)
-        font_hex = get_hex(font.colour_index)
+        # --- DEBUG LOGGING ---
+        # Only print for non-default styles to keep console clean
+        if font_hex == "FF0000" or bg_hex == "FFFF00":
+            print(f"[DEBUG STYLE] Row {row_idx}, Col {col_idx} | FontIdx: {f_idx} (Hex: {font_hex}) | BgIdx: {bg_idx} (Hex: {bg_hex})")
+
         return bg_hex, font_hex, bool(font.bold)
-    except:
-        return None, None, False
+    except Exception as e:
+        print(f"[DEBUG ERROR] Style extraction failed at Row {row_idx}, Col {col_idx}: {e}")
+        return None, None, False    
+
 
 def create_styled_excel(df, filename_prefix="Cleaned"):
     """ Generates Excel with consistent formatting. """
     output = io.BytesIO()
+    mandatory_columns = get_mandatory_columns()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         # Invert map to get Friendly Headers
-        inv_map = {v: k for k, v in MANDATORY_DB_MAP.items()}
-        df_export = df.rename(columns=inv_map)
+        df_export = df.copy()
         
         # Order: Mandatory Headers -> Extra Headers
-        export_cols = [h for h in MANDATORY_HEADERS if h in df_export.columns]
-        remaining = [c for c in df_export.columns if c not in MANDATORY_HEADERS and c != 'unique_id']
+        export_cols = [h for h in mandatory_columns if h in df_export.columns]
+        remaining = [c for c in df_export.columns if c not in mandatory_columns and c != 'unique_id']
         export_cols += remaining
         
         df_export = df_export[export_cols]

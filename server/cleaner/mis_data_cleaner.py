@@ -209,150 +209,150 @@ def process_raw_data(file_list_bytes):
 def process_operation_data(file_list_bytes):
     # 1. Configuration
     COLUMN_TO_RENAME = {
-        'DATE': 'shift_date', 
-        'TRIP ID': 'trip_id', 
-        'FLT NO.': 'flight_number', 
-        'SAP ID': 'employee_id',
-        'EMP NAME': 'employee_name', 
-        'EMPLOYEE ADDRESS': 'employee_address', 
-        'PICKUP LOCATION': 'landmark',
-        'DROP LOCATION': 'office',  
-        'CAB NO': 'cab_registration_no', 
-        'AIRPORT DROP TIME': 'shift_time', 
-        'PICKUP TIME': 'pickup_time',
-        'REMARKS': 'mis_remark'
+        'DATE': 'shift_date', 'TRIP ID': 'trip_id', 'FLT NO.': 'flight_number', 
+        'SAP ID': 'employee_id', 'EMP NAME': 'employee_name', 'EMPLOYEE ADDRESS': 'employee_address', 
+        'PICKUP LOCATION': 'landmark', 'DROP LOCATION': 'office', 'CAB NO': 'cab_registration_no', 
+        'AIRPORT DROP TIME': 'shift_time', 'PICKUP TIME': 'pickup_time', 'REMARKS': 'mis_remark'
     }
-    SKIP_HEADERS = ['CONTACT NO.', 'GUARD ROUTE']
+    SKIP_HEADERS = ['CONTACT NO', 'GUARD ROUTE']
 
     # 2. Initialize Workbook & Shared Styles
     wb = Workbook()
     ws = wb.active
     ws.title = "Operation_Data"
     
-    # Styles for openpyxl
     border = Border(left=Side(style="thin"), right=Side(style="thin"), 
                     top=Side(style="thin"), bottom=Side(style="thin"))
     align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # 3. Setup Headers
-    MANDATORY_HEADERS = get_mandatory_columns()
+    # Note: get_mandatory_columns() must be defined in your environment
+    try:
+        MANDATORY_HEADERS = get_mandatory_columns()
+    except:
+        MANDATORY_HEADERS = list(COLUMN_TO_RENAME.values())
+
     for col_idx, header in enumerate(MANDATORY_HEADERS, 1):
-        cell = ws.cell(row=1, column=col_idx, value=header)
+        ws.cell(row=1, column=col_idx, value=header)
     
-    # 4. Processing Loop
     target_row = 2
     data_rows = [] 
     extra_headers_map = {} 
     next_extra_col_idx = len(MANDATORY_HEADERS) + 1
 
+    # 3. Processing Loop
     for filename, content in file_list_bytes:
         if not filename.lower().endswith('.xls'):
             continue
             
+        print(f"\n--- Processing File: {filename} ---")
+        
         try:
-            # Open legacy XLS with formatting
+            # formatting_info=True is essential for style extraction
             rb = xlrd.open_workbook(file_contents=content, formatting_info=True)
             rs = rb.sheet_by_index(0)
-            
-            # Map Source Columns to Targets
-            col_to_target_map = {} 
             source_headers = [str(rs.cell_value(0, c)).strip().upper() for c in range(rs.ncols)]
-
+            
+            # Map Source Columns
+            col_to_target_map = {} 
             for idx, raw_header in enumerate(source_headers):
-                if any(skip in raw_header for skip in SKIP_HEADERS): 
-                    continue
-                
+                if any(skip in raw_header for skip in SKIP_HEADERS): continue
                 match = next((val for key, val in COLUMN_TO_RENAME.items() if key in raw_header), None)
                 if match:
                     col_to_target_map[idx] = {'type': 'mandatory', 'name': match}
                 else:
-                    # Handle Dynamic Extra Columns
                     if raw_header not in extra_headers_map:
                         extra_headers_map[raw_header] = next_extra_col_idx
                         ws.cell(row=1, column=next_extra_col_idx, value=raw_header)
                         next_extra_col_idx += 1
                     col_to_target_map[idx] = {'type': 'extra', 'name': raw_header}
 
-            # Process Rows
+            # 4. Process Data Rows
             for r_idx in range(1, rs.nrows):
-                row_vals = rs.row_values(r_idx)
-                if sum(1 for v in row_vals if str(v).strip() != "") <= 2: 
+                row_vals = [str(rs.cell_value(r_idx, c)).strip() for c in range(rs.ncols)]
+                if sum(1 for v in row_vals if v != "") <= 3: 
                     continue
-                
-                row_data_map = {} 
-                db_row_dict = {}  
-                
-                for c_idx in range(rs.ncols):
-                    if c_idx not in col_to_target_map: 
-                        continue
-                        
-                    mapping = col_to_target_map[c_idx]
-                    target_header = mapping['name']
-                    val = rs.cell_value(r_idx, c_idx)
-                    
-                    # Extract original styling
-                    bg, fg, is_bold = get_xls_style_data(rb, rs.cell_xf_index(r_idx, c_idx))
-                    
-                    style_data = {'val': val, 'bg': bg, 'fg': fg, 'bold': is_bold}
-                    row_data_map[target_header] = style_data
-                    db_row_dict[target_header] = val
 
-                # Write to Excel with formatting
-                ws.row_dimensions[target_row].height = 30
+                row_data_map = {} 
+                db_row_dict = {}
                 
-                # Write Mandatory Columns
+                # Logic Flags for Style Detection across the entire row
+                row_has_yellow_bg = False
+                row_has_red_font = False
+
+                # Pass 1: Extract data and scan row for color indicators
+                for c_idx in range(rs.ncols):
+                    bg, fg, is_bold = get_xls_style_data(rb, rs.cell_xf_index(r_idx, c_idx), r_idx, c_idx)
+                    
+                    if fg == "FF0000": row_has_red_font = True
+                    if bg == "FFFF00": row_has_yellow_bg = True
+                    
+                    if c_idx in col_to_target_map:
+                        target_header = col_to_target_map[c_idx]['name']
+                        val = rs.cell_value(r_idx, c_idx)
+                        row_data_map[target_header] = {'val': val, 'bg': bg, 'fg': fg, 'bold': is_bold}
+                        db_row_dict[target_header] = val
+
+                # Pass 2: Apply Business Logic Overrides (Priority: Red > Yellow)
+                if row_has_red_font:
+                    db_row_dict['mis_remark'] = "Cancel"
+                    print(f"[LOGIC] Row {r_idx}: Red found -> Marked Cancel")
+                elif row_has_yellow_bg:
+                    db_row_dict['mis_remark'] = "Alt Veh"
+                    print(f"[LOGIC] Row {r_idx}: Yellow found -> Marked Alt Veh")
+
+                # Pass 3: Write to Excel Output
+                ws.row_dimensions[target_row].height = 25
                 for c_out, m_header in enumerate(MANDATORY_HEADERS, 1):
                     cell = ws.cell(row=target_row, column=c_out)
-                    if m_header in row_data_map:
-                        data = row_data_map[m_header]
-                        cell.value = data['val']
-                        if data['bg']:
-                            cell.fill = PatternFill(start_color=data['bg'], end_color=data['bg'], fill_type='solid')
-                        cell.font = Font(size=11, bold=data['bold'], color=data['fg'] if data['fg'] else None)
+                    
+                    # Get value from dict (contains overrides like 'Cancel')
+                    cell.value = db_row_dict.get(m_header, "")
+                    
+                    # Styling for the mis_remark column based on triggers
+                    if m_header == 'mis_remark':
+                        if row_has_red_font:
+                            cell.font = Font(color="FF0000", bold=True)
+                        elif row_has_yellow_bg:
+                            cell.fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type='solid')
+                            cell.font = Font(bold=True)
+                    elif m_header in row_data_map:
+                        # Carry over original formatting for other columns
+                        d = row_data_map[m_header]
+                        if d['bg']:
+                            cell.fill = PatternFill(start_color=d['bg'], end_color=d['bg'], fill_type='solid')
+                        cell.font = Font(bold=d['bold'], color=d['fg'] if d['fg'] else None)
                     
                     cell.alignment = align_center
                     cell.border = border
-                
-                # Write Extra Columns
+
+                # Extra check for dynamic extra columns
                 for extra_name, extra_col_idx in extra_headers_map.items():
                     cell = ws.cell(row=target_row, column=extra_col_idx)
                     if extra_name in row_data_map:
-                        data = row_data_map[extra_name]
-                        cell.value = data['val']
-                    cell.alignment = align_center
-                    cell.border = border
-                
-                data_rows.append(db_row_dict)
-                target_row += 1
+                        cell.value = row_data_map[extra_name]['val']
+                        cell.alignment = align_center
+                        cell.border = border
+
+                # Append row to DB list
+                if db_row_dict.get('employee_id') or db_row_dict.get('employee_name'):
+                    data_rows.append(db_row_dict)
+                    target_row += 1
             
             rb.release_resources()
         except Exception as e:
-            print(f"Error processing {filename}: {e}")
+            print(f"[BREAKING ERROR] File {filename}: {e}")
+            traceback.print_exc()
 
-    # 5. Finalize Excel Formatting
-    format_excel_sheet(ws)
+    # 5. Finalize
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     
-    if not data_rows:
-        return None, output, "Operation_Cleaned.xlsx"
-
-    # 6. Dataframe Post-Processing
     df_db = pd.DataFrame(data_rows)
-    
-    if 'shift_date' in df_db.columns: 
+    if not df_db.empty and 'shift_date' in df_db.columns:
         df_db['shift_date'] = pd.to_datetime(df_db['shift_date'], errors='coerce').dt.strftime('%Y-%m-%d')
     
-    if 'shift_time' in df_db.columns:
-        # Custom time parsing if needed
-        pass 
-
-    # 7. Sync with DB Model
-    df_db = standardize_dataframe(df_db)
-    
     return df_db, output, "Operation_Cleaned.xlsx"
-
 
 
 
