@@ -15,8 +15,6 @@ class User(DynamicSQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(index=True, unique=True)
     password_hash: str
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
 
 # --- 2. GPS CORNER DATA (Existing) ---
 class TripData(DynamicSQLModel, table=True):

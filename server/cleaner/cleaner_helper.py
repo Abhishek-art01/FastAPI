@@ -10,13 +10,14 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 import traceback
 from openpyxl.utils import get_column_letter
 
+#=================================================================
+from ..models import OperationData
+#=================================================================
+
 
 #=================================================================
 
-metadata = {created_at,
-    updated_at,
-    operation_type,
-    processed_by}
+metadata = {'created_at','updated_at','operation_type','processed_by'}
 
 def get_mandatory_columns():
     """Get all column names from OperationData model"""
@@ -30,8 +31,7 @@ def get_mandatory_columns():
     
     return columns
 
-from openpyxl.styles import PatternFill, Font, Alignment
-from openpyxl.utils import get_column_letter
+
 
 def format_excel_headers(ws, start_row=1, start_col=1):
     """

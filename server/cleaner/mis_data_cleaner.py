@@ -205,17 +205,6 @@ def process_raw_data(file_list_bytes):
 # ==========================================
 # 3. OPERATION DATA CLEANER
 # ==========================================
-import pandas as pd
-import io
-import xlrd
-from openpyxl import Workbook
-from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-from .cleaner_helper import (
-    get_mandatory_columns, 
-    get_xls_style_data, 
-    standardize_dataframe, 
-    format_excel_sheet
-)
 
 def process_operation_data(file_list_bytes):
     # 1. Configuration
