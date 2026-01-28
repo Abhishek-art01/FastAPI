@@ -182,7 +182,7 @@ def process_operation_app_data(file_list_bytes):
             print(f"[BREAKING ERROR] File {filename}: {e}")
             traceback.print_exc()
 
-    # --- 2. DATAFRAME CLEANING & MATH ---
+    # --- DATAFRAME POST-PROCESSING ---
     df_db = pd.DataFrame(data_rows)
     if not df_db.empty:
         # 1. Helper: Convert Serial Date to DD-MM-YYYY
@@ -230,56 +230,53 @@ def process_operation_app_data(file_list_bytes):
         df_db["pickup_time"] = pickup_dt.dt.strftime("%d-%m-%Y %H:%M")
 
 
-        # Step C: FORCE UPPERCASE HEADERS & VALUES
-        df_db.columns = df_db.columns.str.strip().str.upper()
-        
-        # Step D: Numeric Conversion (INT)
-        numeric_cols = ["TRIP_ID", "EMPLOYEE_ID", "CAB_LAST_DIGIT"]
-        for col in numeric_cols:
-            if col in df_db.columns:
-                # errors='coerce' turns junk into NaN, then we fill with 0 to allow int conversion
-                df_db[col] = pd.to_numeric(df_db[col], errors="coerce").fillna(0).astype(int).astype(str)
-
-        # Step E: Address Cleaning (Regex)
-        if "EMPLOYEE_ADDRESS" in df_db.columns:
-            df_db["EMPLOYEE_ADDRESS"] = (
-                df_db["EMPLOYEE_ADDRESS"]
-                .astype(str)
-                .str.replace(r"[- , /]", " ", regex=True)
-                .str.replace(r"\s+", " ", regex=True)
-                .str.strip()
-                .str.upper()
-            )
-
-        # Step F: Final Global Uppercase for All Text
-        text_cols = df_db.select_dtypes(include="object").columns
-        df_db[text_cols] = df_db[text_cols].apply(lambda x: x.str.upper())
-        df_db = df_db.replace("NAN", "").fillna("")
-
-        # --- 3. WRITE TO EXCEL (FROM CLEANED DATAFRAME) ---
-        FINAL_HEADERS = [h.upper() for h in MANDATORY_HEADERS]
-        for col_idx, header in enumerate(FINAL_HEADERS, 1):
-            ws.cell(row=1, column=col_idx, value=header)
-        
-        # Write Uppercase Headers
-        for col_idx, header in enumerate(FINAL_HEADERS, 1):
-            ws.cell(row=1, column=col_idx, value=header)
-
-        # Write Cleaned Values
+        # 5. Fill Excel Sheet cells with calculated data
+        # We rewrite the Excel logic here to ensure the calculated fields are in the file
         for r_idx, row_data in enumerate(df_db.to_dict('records'), 2):
             for c_idx, header in enumerate(MANDATORY_HEADERS, 1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=row_data.get(header, ""))
                 cell.alignment = align_center
                 cell.border = border
 
-    # Final Styles
+        
+        # --- 3. THE CLEANING BLOCK (FIXED) ---
+        df_db.columns = df_db.columns.str.strip().str.upper()
+
+        numeric_cols = ["TRIP_ID", "EMPLOYEE_ID", "CAB_LAST_DIGIT"]
+        for col in numeric_cols:
+            if col in df_db.columns:
+                df_db[col] = pd.to_numeric(df_db[col], errors="coerce")
+
+        if "EMPLOYEE_ADDRESS" in df_db.columns:
+            df_db["EMPLOYEE_ADDRESS"] = (
+                df_db["EMPLOYEE_ADDRESS"]
+                .astype(str)
+                .str.replace(r"[- , /]", " ", regex=True) # Combined regex for speed
+                .str.replace(r"\s+", " ", regex=True)
+                .str.strip()
+                .str.upper()
+            )
+
+        # Final conversion of all text to Upper
+        text_cols = df_db.select_dtypes(include="object").columns
+        df_db[text_cols] = df_db[text_cols].apply(lambda col: col.str.upper())
+        df_db = df_db.fillna("").astype(str)
+
+        # --- 4. WRITE CLEANED DATA TO EXCEL ---
+        # Update headers to match uppercase
+        FINAL_HEADERS = [h.upper() for h in MANDATORY_HEADERS]
+        for col_idx, header in enumerate(FINAL_HEADERS, 1):
+            ws.cell(row=1, column=col_idx, value=header)
+
+
+        df_db = df_db.fillna("").astype(str)
+
     format_excel_sheet(ws)
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     
     return df_db, output, "Operation_Cleaned.xlsx"
-
 # ==========================================
 # 2. MANUAL OPERATION DATA CLEANER
 # ==========================================
