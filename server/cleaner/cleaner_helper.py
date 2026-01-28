@@ -142,6 +142,8 @@ def clean_address(series: pd.Series) -> pd.Series:
 
 
 
+from openpyxl.utils import get_column_letter
+
 def format_excel_sheet(ws):
     """
     Final Excel formatter:
@@ -150,10 +152,7 @@ def format_excel_sheet(ws):
     - Wrap text ON
     - Row height = 30
     - Auto-fit columns
-    - EMPLOYEE ADDRESS width = 80
-    - EMPLOYEE NAME width = 30
     """
-
     # Styles
     header_fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
     header_font = Font(name="Cambria", size=12, bold=True, color="FFFFFF")
@@ -172,9 +171,7 @@ def format_excel_sheet(ws):
         bottom=Side(style="thin")
     )
 
-    # -----------------------------
-    # Header formatting
-    # -----------------------------
+    # 1. Header formatting (First Row)
     for cell in ws[1]:
         cell.fill = header_fill
         cell.font = header_font
@@ -183,22 +180,21 @@ def format_excel_sheet(ws):
 
     ws.row_dimensions[1].height = 30
 
-    # -----------------------------
-    # Cell formatting + row height
-    # -----------------------------
+    # 2. Cell formatting + row height (Data Rows)
     for row in ws.iter_rows(min_row=2):
         ws.row_dimensions[row[0].row].height = 30
         for cell in row:
+            # Note: We don't want to overwrite the Red/Yellow logic 
+            # so we only apply font/alignment if not already specialized
             cell.font = cell_font
             cell.alignment = align_center_wrap
             cell.border = border
 
-    # -----------------------------
-    # Auto-fit column width
-    # -----------------------------
+    # 3. Auto-fit column width
     for col in ws.columns:
         max_length = 0
-        col_letter = get_column_letter(col[0].column)
+        column_idx = col[0].column
+        col_letter = get_column_letter(column_idx)
 
         for cell in col:
             if cell.value:
@@ -206,14 +202,13 @@ def format_excel_sheet(ws):
 
         ws.column_dimensions[col_letter].width = max_length + 2
 
-    # -----------------------------
-    # Override specific columns
-    # -----------------------------
+    # 4. Override specific columns by Header Name
     for cell in ws[1]:
+        col_letter = get_column_letter(cell.column)
         if cell.value == "EMPLOYEE ADDRESS":
-            ws.column_dimensions[cell.column_letter].width = 80
+            ws.column_dimensions[col_letter].width = 80
         elif cell.value == "EMPLOYEE NAME":
-            ws.column_dimensions[cell.column_letter].width = 30
+            ws.column_dimensions[col_letter].width = 30
 
 
 

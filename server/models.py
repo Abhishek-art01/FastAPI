@@ -190,6 +190,7 @@ class OperationData(DynamicSQLModel, table=True):
     drop_time: Optional[str] = None
     trip_direction: Optional[str] = None
     cab_registration_no: Optional[str] = None
+    cab_last_digit: Optional[str] = None
     cab_type: Optional[str] = None
     vendor: Optional[str] = None
     office: Optional[str] = None

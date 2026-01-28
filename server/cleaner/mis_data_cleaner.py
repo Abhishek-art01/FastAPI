@@ -9,7 +9,7 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 import traceback
 from openpyxl import load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
-
+from datetime import datetime, timedelta
 
 from .cleaner_helper import (
     get_mandatory_columns, 
@@ -206,26 +206,25 @@ def process_raw_data(file_list_bytes):
 # 3. OPERATION DATA CLEANER
 # ==========================================
 
+
 def process_operation_data(file_list_bytes):
     # 1. Configuration
     COLUMN_TO_RENAME = {
         'DATE': 'shift_date', 'TRIP ID': 'trip_id', 'FLT NO.': 'flight_number', 
         'SAP ID': 'employee_id', 'EMP NAME': 'employee_name', 'EMPLOYEE ADDRESS': 'employee_address', 
-        'PICKUP LOCATION': 'landmark', 'DROP LOCATION': 'office', 'CAB NO': 'cab_registration_no', 
-        'AIRPORT DROP TIME': 'shift_time', 'PICKUP TIME': 'pickup_time', 'REMARKS': 'mis_remark'
+        'PICKUP LOCATION': 'landmark', 'DROP LOCATION': 'office', 'CAB NO': 'cab_last_digit',
+        'PICKUP TIME': 'pickup_time', 'REMARKS': 'mis_remark'
     }
-    SKIP_HEADERS = ['CONTACT NO', 'GUARD ROUTE']
+    SKIP_HEADERS = ['CONTACT NO', 'GUARD ROUTE', 'AIRPORT DROP TIME']
 
-    # 2. Initialize Workbook & Shared Styles
     wb = Workbook()
     ws = wb.active
     ws.title = "Operation_Data"
     
-    border = Border(left=Side(style="thin"), right=Side(style="thin"), 
-                    top=Side(style="thin"), bottom=Side(style="thin"))
+    # ... (Styles setup same as before) ...
     align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
 
-    # Note: get_mandatory_columns() must be defined in your environment
     try:
         MANDATORY_HEADERS = get_mandatory_columns()
     except:
@@ -241,19 +240,23 @@ def process_operation_data(file_list_bytes):
 
     # 3. Processing Loop
     for filename, content in file_list_bytes:
-        if not filename.lower().endswith('.xls'):
-            continue
-            
+        if not filename.lower().endswith('.xls'): continue
         print(f"\n--- Processing File: {filename} ---")
-        
+
         try:
-            # formatting_info=True is essential for style extraction
             rb = xlrd.open_workbook(file_contents=content, formatting_info=True)
             rs = rb.sheet_by_index(0)
             source_headers = [str(rs.cell_value(0, c)).strip().upper() for c in range(rs.ncols)]
             
-            # Map Source Columns
-            col_to_target_map = {} 
+            # Map columns
+            # --- START ADDED LOGIC: IDENTIFY SPECIFIC COLUMN INDICES ---
+            idx_trip = next((i for i, h in enumerate(source_headers) if 'TRIP ID' in h), None)
+            idx_sap = next((i for i, h in enumerate(source_headers) if 'SAP ID' in h), None)
+            idx_addr = next((i for i, h in enumerate(source_headers) if 'EMPLOYEE ADDRESS' in h), None)
+
+            col_to_target_map = {}
+            # --- END ADDED LOGIC ---
+
             for idx, raw_header in enumerate(source_headers):
                 if any(skip in raw_header for skip in SKIP_HEADERS): continue
                 match = next((val for key, val in COLUMN_TO_RENAME.items() if key in raw_header), None)
@@ -279,9 +282,21 @@ def process_operation_data(file_list_bytes):
                 row_has_yellow_bg = False
                 row_has_red_font = False
 
+                # --- START ADDED LOGIC: 3-COLUMN COUNTERS ---
+                red_count = 0
+                yellow_count = 0
+                check_indices = [idx for idx in [idx_trip, idx_sap, idx_addr] if idx is not None]
+                # --- END ADDED LOGIC ---
+
                 # Pass 1: Extract data and scan row for color indicators
                 for c_idx in range(rs.ncols):
                     bg, fg, is_bold = get_xls_style_data(rb, rs.cell_xf_index(r_idx, c_idx), r_idx, c_idx)
+                    
+                    # --- START ADDED LOGIC: UPDATE COUNTERS BASED ON 3 SPECIFIC COLUMNS ---
+                    if c_idx in check_indices:
+                        if fg == "FF0000": red_count += 1
+                        if bg == "FFFF00": yellow_count += 1
+                    # --- END ADDED LOGIC ---
                     
                     if fg == "FF0000": row_has_red_font = True
                     if bg == "FFFF00": row_has_yellow_bg = True
@@ -291,6 +306,11 @@ def process_operation_data(file_list_bytes):
                         val = rs.cell_value(r_idx, c_idx)
                         row_data_map[target_header] = {'val': val, 'bg': bg, 'fg': fg, 'bold': is_bold}
                         db_row_dict[target_header] = val
+
+                # --- START ADDED LOGIC: RE-EVALUATE FLAGS BASED ON 3-COLUMN RULE ---
+                row_has_red_font = (red_count == 3)
+                row_has_yellow_bg = (yellow_count == 3)
+                # --- END ADDED LOGIC ---
 
                 # Pass 2: Apply Business Logic Overrides (Priority: Red > Yellow)
                 if row_has_red_font:
@@ -343,18 +363,103 @@ def process_operation_data(file_list_bytes):
             print(f"[BREAKING ERROR] File {filename}: {e}")
             traceback.print_exc()
 
-    # 5. Finalize
+    # --- 2. DATAFRAME CLEANING & MATH ---
+    df_db = pd.DataFrame(data_rows)
+    if not df_db.empty:
+        # 1. Helper: Convert Serial Date to DD-MM-YYYY
+        def convert_date(d):
+            try:
+                # Handle Excel Serial (e.g., 46023)
+                f_val = float(d)
+                # Excel's base date is 1899-12-30
+                dt = datetime(1899, 12, 30) + timedelta(days=f_val)
+                return dt.strftime('%d-%m-%Y')
+            except:
+                return str(d)
+
+        # 2. Helper: Convert Serial Time to HH:MM
+        def convert_time(t):
+            try:
+                f_val = float(t) % 1 # MOD 1 logic
+                seconds = int(round(f_val * 86400))
+                return (datetime.min + timedelta(seconds=seconds)).strftime('%H:%M')
+            except:
+                return str(t)
+
+        print("[DEBUG] Converting Date to DD-MM-YYYY and calculating Shift Time...")
+        df_db['shift_date'] = df_db['shift_date'].apply(convert_date)
+        df_db['pickup_time'] = df_db['pickup_time'].apply(convert_time)
+
+        # 3. Logic: SHIFT TIME = PICKUP TIME + 2 HOURS
+        # Convert DD-MM-YYYY back to datetime for calculation
+        temp_pickup_dt = pd.to_datetime(df_db['shift_date'] + " " + df_db['pickup_time'], dayfirst=True, errors='coerce')
+        
+        # Add 2 Hours
+        temp_shift_dt = temp_pickup_dt + pd.Timedelta(hours=2)
+        shift_date_dt = pd.to_datetime(df_db["shift_date"], dayfirst=True).dt.date
+
+        # 4. Populate Final Columns
+        df_db['shift_time'] = temp_shift_dt.dt.strftime('%H:%M')
+        fixed_drop_dt = temp_shift_dt.where(
+            temp_shift_dt.dt.date == shift_date_dt,
+            temp_shift_dt - pd.Timedelta(days=1)
+        )
+        df_db["drop_time"] = fixed_drop_dt.dt.strftime("%d-%m-%Y %H:%M")
+
+        # Keep pickup_time as HH:MM
+        pickup_dt = fixed_drop_dt - pd.Timedelta(hours=2)
+        df_db["pickup_time"] = pickup_dt.dt.strftime("%d-%m-%Y %H:%M")
+
+
+        # Step C: FORCE UPPERCASE HEADERS & VALUES
+        df_db.columns = df_db.columns.str.strip().str.upper()
+        
+        # Step D: Numeric Conversion (INT)
+        numeric_cols = ["TRIP_ID", "EMPLOYEE_ID", "CAB_LAST_DIGIT"]
+        for col in numeric_cols:
+            if col in df_db.columns:
+                # errors='coerce' turns junk into NaN, then we fill with 0 to allow int conversion
+                df_db[col] = pd.to_numeric(df_db[col], errors="coerce").fillna(0).astype(int).astype(str)
+
+        # Step E: Address Cleaning (Regex)
+        if "EMPLOYEE_ADDRESS" in df_db.columns:
+            df_db["EMPLOYEE_ADDRESS"] = (
+                df_db["EMPLOYEE_ADDRESS"]
+                .astype(str)
+                .str.replace(r"[- , /]", " ", regex=True)
+                .str.replace(r"\s+", " ", regex=True)
+                .str.strip()
+                .str.upper()
+            )
+
+        # Step F: Final Global Uppercase for All Text
+        text_cols = df_db.select_dtypes(include="object").columns
+        df_db[text_cols] = df_db[text_cols].apply(lambda x: x.str.upper())
+        df_db = df_db.replace("NAN", "").fillna("")
+
+        # --- 3. WRITE TO EXCEL (FROM CLEANED DATAFRAME) ---
+        FINAL_HEADERS = [h.upper() for h in MANDATORY_HEADERS]
+        for col_idx, header in enumerate(FINAL_HEADERS, 1):
+            ws.cell(row=1, column=col_idx, value=header)
+        
+        # Write Uppercase Headers
+        for col_idx, header in enumerate(FINAL_HEADERS, 1):
+            ws.cell(row=1, column=col_idx, value=header)
+
+        # Write Cleaned Values
+        for r_idx, row_data in enumerate(df_db.to_dict('records'), 2):
+            for c_idx, header in enumerate(MANDATORY_HEADERS, 1):
+                cell = ws.cell(row=r_idx, column=c_idx, value=row_data.get(header, ""))
+                cell.alignment = align_center
+                cell.border = border
+
+    # Final Styles
+    format_excel_sheet(ws)
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
     
-    df_db = pd.DataFrame(data_rows)
-    if not df_db.empty and 'shift_date' in df_db.columns:
-        df_db['shift_date'] = pd.to_datetime(df_db['shift_date'], errors='coerce').dt.strftime('%Y-%m-%d')
-    
     return df_db, output, "Operation_Cleaned.xlsx"
-
-
 
 # ==========================================
 # 4. BAROW DATA CLEANER
