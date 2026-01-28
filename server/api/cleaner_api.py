@@ -23,10 +23,11 @@ from sqladmin.authentication import AuthenticationBackend
 from ..auth import verify_password, get_password_hash
 from ..database import create_db_and_tables, get_session, engine
 from ..models import User, ClientData, RawTripData, OperationData, TripData, T3AddressLocality, T3LocalityZone, T3ZoneKm, BARowData
-from ..cleaner.mis_data_cleaner import process_client_data, process_raw_data, process_operation_data,process_ba_row_data
+from ..cleaner.mis_data_cleaner import process_client_data, process_raw_data,process_ba_row_data
 from ..cleaner.fastag_data_cleaner import process_fastag_data
 from ..cleaner.cleaner_helper import create_styled_excel
 from ..cleaner.cleaner_helper import bulk_save_unique
+from ..cleaner.operation_data_cleaner import process_operation_app_data
 
 # 1. Setup paths relative to THIS file
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -145,7 +146,7 @@ async def clean_data(
             for f in files:
                 content = await f.read()
                 file_data.append((f.filename, content))
-            df_result, excel_output, filename = process_operation_data(file_data)
+            df_result, excel_output, filename = process_operation_app_data(file_data)
 
             if excel_output is None:
                 return Response("Error processing data", status_code=400)
